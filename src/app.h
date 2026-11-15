@@ -19,11 +19,13 @@ private:
     void drawFeeds(int h, int w);
     void drawPosts(int h, int w);
     void drawPostBody(int top, int x, int width, int bottom);
+    void drawFocus(int h, int w);
     void drawLine(int y, int x, int right, const text::Line& line);
     void drawStatus(int h, int w);
     void handleKey(int ch);
     void handleFeedsKey(int ch);
     void handlePostsKey(int ch);
+    void handleFocusKey(int ch);
 
     void reloadFeeds();
     void beginSearch();
@@ -55,6 +57,7 @@ private:
     size_t post_offset_ = 0;
     size_t content_offset_ = 0;
     size_t content_max_offset_ = 0;
+    bool focus_ = false;
     std::string query_;
     int left_pct_ = 20;
     bool running_ = true;

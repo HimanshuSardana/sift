@@ -29,8 +29,8 @@ constexpr int kCtlLeft = KEY_MAX + 1;
 constexpr int kCtlRight = KEY_MAX + 2;
 
 const char kHelpFeeds[] = " j/k move  a add  d delete  r refetch  / search  l open  q quit ";
-const char kHelpPosts[] = " j/k move  l content  h feeds  / search  n next  q quit ";
-const char kHelpContent[] = " j/k scroll   s scrape   h posts   r refetch   q quit ";
+const char kHelpPosts[] = " j/k move  l content  h feeds  / search  n next  f focus  q quit ";
+const char kHelpContent[] = " j/k scroll  s scrape  / search  n next  f focus  h posts  q quit ";
 
 std::string trim(const std::string& s) {
     auto ws = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -173,6 +173,8 @@ void App::draw() {
 
     if (h < 2 || w < 20) {
         mvaddnstr(0, 0, "terminal too small", std::max(1, w - 1));
+    } else if (focus_) {
+        drawFocus(h, w);
     } else if (view_ == View::Feeds) {
         drawFeeds(h, w);
     } else {
@@ -352,6 +354,85 @@ void App::drawLine(int y, int x, int right, const text::Line& line) {
     }
 }
 
+// Reading view: no panes, no borders, just the article wrapped to a
+// comfortable measure and centred in the terminal.
+void App::drawFocus(int h, int w) {
+    const int width = std::max(10, std::min(w - 2, 80));
+    const int x = std::max(1, (w - width) / 2);
+    const int rows = status_.empty() ? h : h - 1;
+
+    const text::Lines lines = contentLines();
+    if (lines.empty()) {
+        attron(A_DIM);
+        mvaddnstr(0, x, "(this post has no content)", width);
+        attroff(A_DIM);
+        return;
+    }
+
+    content_max_offset_ = lines.size() > static_cast<size_t>(rows)
+                              ? lines.size() - static_cast<size_t>(rows)
+                              : 0;
+    content_offset_ = std::min(content_offset_, content_max_offset_);
+
+    for (int r = 0; r < rows; ++r) {
+        const size_t i = content_offset_ + static_cast<size_t>(r);
+        if (i >= lines.size()) break;
+        drawLine(r, x, x + width, lines[i]);
+    }
+
+    if (!status_.empty()) {
+        const int attr = color_ ? (status_error_ ? A_BOLD | pair(kPairErr) : pair(kPairOk)) : A_DIM;
+        attron(attr);
+        mvaddnstr(h - 1, x, status_.c_str(), width);
+        attroff(attr);
+    }
+}
+
+void App::handleFocusKey(int ch) {
+    switch (ch) {
+        case 'f':
+        case 'h':
+        case KEY_LEFT:
+        case 27:
+            focus_ = false;
+            pane_ = Pane::Content;
+            return;
+        case 'j':
+        case KEY_DOWN:
+            if (content_offset_ < content_max_offset_) ++content_offset_;
+            return;
+        case 'k':
+        case KEY_UP:
+            if (content_offset_ > 0) --content_offset_;
+            return;
+        case 'g':
+        case KEY_HOME:
+            content_offset_ = 0;
+            return;
+        case 'G':
+        case KEY_END:
+            content_offset_ = content_max_offset_;
+            return;
+        case '/':
+            beginSearch();
+            return;
+        case 'n':
+            findNext(1, false);
+            return;
+        case 'N':
+            findNext(-1, false);
+            return;
+        case 's':
+            scrapeCurrentPost();
+            return;
+        case 'r':
+            refetch();
+            return;
+        default:
+            return;
+    }
+}
+
 void App::drawStatus(int h, int w) {
     std::string line = status_;
     if (line.empty()) {
@@ -372,7 +453,9 @@ void App::handleKey(int ch) {
         running_ = false;
         return;
     }
-    if (view_ == View::Feeds) {
+    if (focus_) {
+        handleFocusKey(ch);
+    } else if (view_ == View::Feeds) {
         handleFeedsKey(ch);
     } else {
         handlePostsKey(ch);
@@ -516,6 +599,9 @@ void App::handlePostsKey(int ch) {
         case 'N':
             findNext(-1, false);
             return;
+        case 'f':
+            focus_ = true;
+            return;
         case 's':
             if (pane_ == Pane::Content) scrapeCurrentPost();
             return;
@@ -610,6 +696,7 @@ void App::findNext(int dir, bool inclusive) {
 
 int App::contentWidth() const {
     int w = getmaxx(stdscr);
+    if (focus_) return std::max(10, std::min(w - 2, 80));
     return std::max(4, w - leftWidth(w) - 2);
 }
 
