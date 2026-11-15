@@ -34,6 +34,8 @@ private:
     void findNext(int dir, bool inclusive);
     int contentWidth() const;
     text::Lines contentLines() const;
+    void toggleImages();
+    int drawImageBlock(int x, int y, int width, int bottom);
     void openLinkPalette();
     void openSelectedLink();
     std::vector<size_t> paletteMatches() const;
@@ -64,6 +66,13 @@ private:
     size_t content_offset_ = 0;
     size_t content_max_offset_ = 0;
     bool focus_ = false;
+    bool images_ = false;
+    std::string image_path_;
+    int image_w_ = 0;
+    int image_h_ = 0;
+    std::string placed_sig_;
+    bool pending_image_ = false;
+    int pending_rect_[4] = {0, 0, 0, 0};
     bool palette_ = false;
     std::string palette_query_;
     size_t palette_selected_ = 0;

@@ -31,6 +31,9 @@ struct Link {
 // External links in document order, de-duplicated by href.
 std::vector<Link> links(const std::string& html);
 
+// <img src> values in document order, de-duplicated.
+std::vector<std::string> imageUrls(const std::string& html);
+
 // Renders an HTML fragment into styled lines wrapped to width columns:
 // headings and <strong> bold, links underlined with their href appended,
 // list items bulleted or numbered, quotes and code dimmed.

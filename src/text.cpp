@@ -325,6 +325,22 @@ void walkLinks(xmlNode* n, std::vector<text::Link>& out) {
     }
 }
 
+void walkImages(xmlNode* n, std::vector<std::string>& out) {
+    for (; n; n = n->next) {
+        if (n->type != XML_ELEMENT_NODE) continue;
+        const std::string name = lowerName(n);
+        if (name == "img") {
+            const std::string src = attr(n, "src");
+            if (!src.empty()) {
+                bool seen = false;
+                for (const std::string& s : out) seen = seen || s == src;
+                if (!seen) out.push_back(src);
+            }
+        }
+        walkImages(n->children, out);
+    }
+}
+
 void appendSegment(text::Line& line, const std::string& s, unsigned style) {
     if (s.empty()) return;
     if (!line.segments.empty() && line.segments.back().style == style) {
@@ -449,6 +465,18 @@ std::vector<Link> links(const std::string& html) {
     if (!doc) return out;
     xmlNode* root = xmlDocGetRootElement(doc.get());
     if (root) walkLinks(root, out);
+    return out;
+}
+
+std::vector<std::string> imageUrls(const std::string& html) {
+    std::vector<std::string> out;
+    std::unique_ptr<xmlDoc, DocFree> doc(
+        htmlReadMemory(html.c_str(), static_cast<int>(html.size()), nullptr, nullptr,
+                       HTML_PARSE_RECOVER | HTML_PARSE_NOERROR | HTML_PARSE_NOWARNING |
+                           HTML_PARSE_NONET));
+    if (!doc) return out;
+    xmlNode* root = xmlDocGetRootElement(doc.get());
+    if (root) walkImages(root, out);
     return out;
 }
 

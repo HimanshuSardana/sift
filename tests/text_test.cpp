@@ -132,6 +132,16 @@ void testLinkList() {
     require(text::links("<p>no links</p>").empty(), "no links");
 }
 
+void testImageUrls() {
+  const auto imgs = text::imageUrls(
+      "<p><img src=\"https://a.test/1.png\"></p><p><img src=\"/rel.png\"></p>"
+      "<p><img src=\"https://a.test/1.png\"></p>");
+  require(imgs.size() == 2, "unique image sources");
+  require(imgs[0] == "https://a.test/1.png", "absolute kept");
+  require(imgs[1] == "/rel.png", "relative kept for the caller to resolve");
+  require(text::imageUrls("<p>no images</p>").empty(), "no images");
+}
+
 void testListWrapIndent() {
     const auto lines =
         text::renderHtml("<ul><li>alpha beta gamma delta epsilon</li></ul>", 16);
@@ -145,11 +155,12 @@ void testListWrapIndent() {
 int main() {
     testStructure();
     testEntitiesAndJunk();
+    testLinks();
     testLinkList();
+    testImageUrls();
     testListsAndQuotes();
     testWrapAndPre();
     testPreIndent();
-    testLinkList();
     testListWrapIndent();
     std::puts("text tests passed");
     return 0;
