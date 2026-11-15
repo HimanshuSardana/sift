@@ -12,13 +12,33 @@
 namespace {
 
 const char kHelpFeeds[] = " j/k move   a add feed   r refetch   Enter open   q quit ";
-const char kHelpPosts[] = " h back   r refetch   q quit ";
+const char kHelpPosts[] = " j/k move   l content   r refetch   Esc back   q quit ";
+const char kHelpContent[] = " h posts   r refetch   Esc back   q quit ";
 
 std::string trim(const std::string& s) {
     auto ws = [](unsigned char c) { return std::isspace(c) != 0; };
     auto b = std::find_if_not(s.begin(), s.end(), ws);
     auto e = std::find_if_not(s.rbegin(), s.rend(), ws).base();
     return b < e ? std::string(b, e) : std::string();
+}
+
+std::string formatDate(const std::optional<long long>& ts) {
+    if (!ts) return {};
+    const std::time_t t = static_cast<std::time_t>(*ts);
+    std::tm tm{};
+    if (!localtime_r(&t, &tm)) return {};
+    char buf[16] = {};
+    if (strftime(buf, sizeof(buf), "%Y-%m-%d", &tm) == 0) return {};
+    return buf;
+}
+
+void drawBar(int y, int x, int width, const std::string& text, bool focused) {
+    if (width <= 1) return;
+    const int attr = focused ? A_REVERSE : A_REVERSE | A_DIM;
+    attron(attr);
+    mvhline(y, x, ' ', width);
+    mvaddnstr(y, x, text.c_str(), width);
+    attroff(attr);
 }
 
 }  // namespace
@@ -29,6 +49,7 @@ void App::run() {
     noecho();
     keypad(stdscr, TRUE);
     curs_set(0);
+    set_escdelay(25);
 
     reloadFeeds();
 
@@ -94,18 +115,92 @@ void App::drawFeeds(int h, int w) {
 
 void App::drawPosts(int h, int w) {
     const Feed* f = current();
-    std::string header = " sift - " + (f ? (f->title.empty() ? f->url : f->title) : "") + " ";
-    attron(A_REVERSE);
-    mvhline(0, 0, ' ', w);
-    mvaddnstr(0, 0, header.c_str(), w - 1);
-    attroff(A_REVERSE);
+    const std::string feed_title = f ? (f->title.empty() ? f->url : f->title) : std::string();
 
-    mvaddnstr(2, 2, (std::to_string(posts_.size()) + " posts stored.").c_str(), w - 3);
+    int left = std::max(18, w * 20 / 100);
+    if (left > w - 12) left = std::max(10, w / 2);
+    const int right_x = left + 1;
+    const int right_w = w - right_x;
+    const int rows = h - 2;
+
+    if (posts_.empty()) {
+        drawBar(0, 0, w, " " + feed_title + " (0) ", pane_ == Pane::Posts);
+        mvaddnstr(2, 2, "No posts yet. Press r to refetch.", w - 3);
+        drawStatus(h, w);
+        return;
+    }
+
+    drawBar(0, 0, left, " " + feed_title + " (" + std::to_string(posts_.size()) + ") ",
+            pane_ == Pane::Posts);
+    const Post* p = currentPost();
+    drawBar(0, right_x, right_w, p ? " " + p->title + " " : " post ", pane_ == Pane::Content);
+
+    for (int y = 0; y < 1 + rows; ++y) mvaddch(y, left, '|');
+
+    if (post_selected_ < post_offset_) post_offset_ = post_selected_;
+    if (post_selected_ >= post_offset_ + static_cast<size_t>(rows))
+        post_offset_ = post_selected_ - static_cast<size_t>(rows) + 1;
+
+    const int sel_attr = pane_ == Pane::Posts ? A_REVERSE : A_REVERSE | A_DIM;
+    for (int r = 0; r < rows; ++r) {
+        const size_t i = post_offset_ + static_cast<size_t>(r);
+        if (i >= posts_.size()) break;
+        const Post& post = posts_[i];
+        const std::string label = " " + formatDate(post.published_at) + " " + post.title;
+        const int y = 1 + r;
+        const bool sel = i == post_selected_;
+        if (sel) {
+            attron(sel_attr);
+            mvhline(y, 0, ' ', left);
+        }
+        mvaddnstr(y, 0, label.c_str(), left - 1);
+        if (sel) attroff(sel_attr);
+    }
+
+    drawPostBody(1, right_x, right_w, h - 1);
     drawStatus(h, w);
 }
 
+void App::drawPostBody(int top, int x, int width, int bottom) {
+    if (width <= 2) return;
+
+    const Post* p = currentPost();
+    if (!p) {
+        mvaddnstr(top, x + 1, "Select a post.", width - 2);
+        return;
+    }
+
+    int y = top;
+    attron(A_BOLD);
+    mvaddnstr(y++, x + 1, p->title.c_str(), width - 2);
+    attroff(A_BOLD);
+
+    std::string meta = p->author;
+    const std::string date = formatDate(p->published_at);
+    if (!date.empty()) meta += (meta.empty() ? "" : "  ") + date;
+    if (!meta.empty()) {
+        attron(A_DIM);
+        mvaddnstr(y++, x + 1, meta.c_str(), width - 2);
+        attroff(A_DIM);
+    }
+    if (!p->url.empty()) {
+        attron(A_DIM);
+        mvaddnstr(y++, x + 1, p->url.c_str(), width - 2);
+        attroff(A_DIM);
+    }
+
+    y++;
+    if (y < bottom) mvaddnstr(y, x + 1, "(post body rendering is not implemented yet)", width - 2);
+}
+
 void App::drawStatus(int h, int w) {
-    const std::string& line = status_.empty() ? (view_ == View::Feeds ? kHelpFeeds : kHelpPosts) : status_;
+    std::string line = status_;
+    if (line.empty()) {
+        if (view_ == View::Feeds)
+            line = kHelpFeeds;
+        else
+            line = pane_ == Pane::Content ? kHelpContent : kHelpPosts;
+    }
     attron(A_DIM);
     mvaddnstr(h - 1, 0, line.c_str(), w - 1);
     attroff(A_DIM);
@@ -163,6 +258,9 @@ void App::handleFeedsKey(int ch) {
         case KEY_ENTER:
             if (n) {
                 reloadPosts();
+                post_selected_ = 0;
+                post_offset_ = 0;
+                pane_ = Pane::Posts;
                 view_ = View::Posts;
                 offset_ = 0;
             }
@@ -173,17 +271,55 @@ void App::handleFeedsKey(int ch) {
 }
 
 void App::handlePostsKey(int ch) {
-    if (ch == 27 || ch == 'h' || ch == KEY_LEFT) {
-        view_ = View::Feeds;
-        offset_ = 0;
-    } else if (ch == 'r') {
-        refetch();
+    switch (ch) {
+        case 27:  // Esc returns to the feed list; h/l are reserved for focus.
+            view_ = View::Feeds;
+            offset_ = 0;
+            pane_ = Pane::Posts;
+            return;
+        case 'h':
+        case KEY_LEFT:
+            pane_ = Pane::Posts;
+            return;
+        case 'l':
+        case KEY_RIGHT:
+            pane_ = Pane::Content;
+            return;
+        case '\n':
+        case '\r':
+        case KEY_ENTER:
+            if (pane_ == Pane::Posts) pane_ = Pane::Content;
+            return;
+        case 'j':
+        case KEY_DOWN:
+            if (pane_ == Pane::Posts && post_selected_ + 1 < posts_.size())
+                selectPost(post_selected_ + 1);
+            return;
+        case 'k':
+        case KEY_UP:
+            if (pane_ == Pane::Posts && post_selected_ > 0) selectPost(post_selected_ - 1);
+            return;
+        case 'g':
+        case KEY_HOME:
+            if (pane_ == Pane::Posts && !posts_.empty()) selectPost(0);
+            return;
+        case 'G':
+        case KEY_END:
+            if (pane_ == Pane::Posts && !posts_.empty()) selectPost(posts_.size() - 1);
+            return;
+        case 'r':
+            refetch();
+            return;
+        default:
+            return;
     }
 }
 
 void App::reloadPosts() {
     const Feed* f = current();
     posts_ = f ? db::posts(f->id) : std::vector<Post>{};
+    post_selected_ = posts_.empty() ? 0 : std::min(post_selected_, posts_.size() - 1);
+    if (post_selected_ < post_offset_) post_offset_ = post_selected_;
 }
 
 void App::refetch() {
@@ -241,6 +377,16 @@ void App::selectFeedById(long long id) {
 const Feed* App::current() const {
     if (feeds_.empty() || selected_ >= feeds_.size()) return nullptr;
     return &feeds_[selected_];
+}
+
+const Post* App::currentPost() const {
+    if (posts_.empty() || post_selected_ >= posts_.size()) return nullptr;
+    return &posts_[post_selected_];
+}
+
+void App::selectPost(size_t index) {
+    if (posts_.empty()) return;
+    post_selected_ = std::min(index, posts_.size() - 1);
 }
 
 bool App::prompt(const char* label, std::string& out) {
