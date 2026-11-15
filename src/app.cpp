@@ -44,14 +44,50 @@ std::string formatDate(const std::optional<long long>& ts) {
     return buf;
 }
 
-void drawBar(int y, int x, int width, const std::string& text, bool focused, bool color) {
-    if (width <= 1) return;
-    int attr = focused ? A_BOLD : A_DIM;
-    attr |= color ? COLOR_PAIR(kPairBar) : A_REVERSE;
-    attron(attr);
-    mvhline(y, x, ' ', width);
-    mvaddnstr(y, x, text.c_str(), width);
-    attroff(attr);
+struct Panel {
+    int top = 0;
+    int left = 0;
+    int height = 0;
+    int width = 0;
+
+    int innerTop() const { return top + 1; }
+    int innerLeft() const { return left + 1; }
+    int innerRows() const { return height - 2; }
+    int innerWidth() const { return width - 2; }
+};
+
+// Borders the panel and cuts the title into the top border, like a tmux pane.
+void drawPanel(const Panel& p, const std::string& title, bool focused, bool color) {
+    if (p.height < 2 || p.width < 4) return;
+
+    const int right = p.left + p.width - 1;
+    const int bottom = p.top + p.height - 1;
+
+    int border = focused ? A_BOLD : A_DIM;
+    if (color) border |= COLOR_PAIR(kPairTitle);
+
+    attron(border);
+    mvhline(p.top, p.left + 1, ACS_HLINE, p.width - 2);
+    mvhline(bottom, p.left + 1, ACS_HLINE, p.width - 2);
+    mvvline(p.top + 1, p.left, ACS_VLINE, p.height - 2);
+    mvvline(p.top + 1, right, ACS_VLINE, p.height - 2);
+    mvaddch(p.top, p.left, ACS_ULCORNER);
+    mvaddch(p.top, right, ACS_URCORNER);
+    mvaddch(bottom, p.left, ACS_LLCORNER);
+    mvaddch(bottom, right, ACS_LRCORNER);
+    attroff(border);
+
+    if (title.empty() || p.width <= 8) return;
+
+    std::string label = " " + title + " ";
+    const int room = p.width - 4;
+    if (static_cast<int>(label.size()) > room) label.resize(static_cast<size_t>(room));
+
+    int title_attr = focused ? A_BOLD : A_DIM;
+    if (color) title_attr |= COLOR_PAIR(focused ? kPairAccent : kPairMeta);
+    attron(title_attr);
+    mvaddnstr(p.top, p.left + 2, label.c_str(), room);
+    attroff(title_attr);
 }
 
 }  // namespace
@@ -125,13 +161,20 @@ void App::draw() {
 }
 
 void App::drawFeeds(int h, int w) {
-    const std::string header = " sift - feeds (" + std::to_string(feeds_.size()) + ") ";
-    drawBar(0, 0, w, header, true, color_);
+    const Panel panel{0, 0, h - 1, w};
+    drawPanel(panel, "sift - feeds (" + std::to_string(feeds_.size()) + ")", true, color_);
 
-    const int rows = h - 2;
+    const int rows = panel.innerRows();
+    const int inner_x = panel.innerLeft();
+    const int inner_w = panel.innerWidth();
+    if (rows < 1 || inner_w < 4) {
+        drawStatus(h, w);
+        return;
+    }
+
     if (feeds_.empty()) {
         attron(pair(kPairMeta));
-        mvaddnstr(1, 2, "No feeds yet. Press 'a' to add one.", w - 3);
+        mvaddnstr(panel.innerTop(), inner_x + 1, "No feeds yet. Press 'a' to add one.", inner_w - 2);
         attroff(pair(kPairMeta));
         drawStatus(h, w);
         return;
@@ -145,18 +188,12 @@ void App::drawFeeds(int h, int w) {
         const size_t i = offset_ + static_cast<size_t>(r);
         const Feed& f = feeds_[i];
         const std::string label = " " + (f.title.empty() ? f.url : f.title);
-        const int y = 1 + r;
+        const int y = panel.innerTop() + r;
         const bool sel = i == selected_;
-        int attr = A_NORMAL;
-        if (sel) {
-            attr |= A_REVERSE;
-            attron(attr);
-            mvhline(y, 0, ' ', w);
-        } else {
-            attr |= pair(kPairTitle);
-            attron(attr);
-        }
-        mvaddnstr(y, 0, label.c_str(), w - 1);
+        const int attr = sel ? A_REVERSE : pair(kPairTitle);
+        attron(attr);
+        if (sel) mvhline(y, inner_x, ' ', inner_w);
+        mvaddnstr(y, inner_x, label.c_str(), inner_w);
         attroff(attr);
     }
 
@@ -167,30 +204,35 @@ void App::drawPosts(int h, int w) {
     const Feed* f = current();
     const std::string feed_title = f ? (f->title.empty() ? f->url : f->title) : std::string();
 
-    int left = std::max(18, w * 20 / 100);
-    if (left > w - 12) left = std::max(10, w / 2);
-    const int right_x = left + 1;
-    const int right_w = w - right_x;
-    const int rows = h - 2;
+    int left_w = std::max(18, w * 20 / 100);
+    if (left_w > w - 12) left_w = std::max(10, w / 2);
+    const Panel left_panel{0, 0, h - 1, left_w};
 
     if (posts_.empty()) {
-        drawBar(0, 0, w, " " + feed_title + " (0) ", pane_ == Pane::Posts, color_);
-        attron(pair(kPairMeta));
-        mvaddnstr(2, 2, "No posts yet. Press r to refetch.", w - 3);
-        attroff(pair(kPairMeta));
+        drawPanel(left_panel, feed_title + " (0)", pane_ == Pane::Posts, color_);
+        if (left_panel.innerRows() >= 2) {
+            attron(pair(kPairMeta));
+            mvaddnstr(left_panel.innerTop() + 1, left_panel.innerLeft() + 1,
+                      "No posts yet. Press r to refetch.", left_panel.innerWidth() - 2);
+            attroff(pair(kPairMeta));
+        }
         drawStatus(h, w);
         return;
     }
 
-    drawBar(0, 0, left, " " + feed_title + " (" + std::to_string(posts_.size()) + ") ",
-            pane_ == Pane::Posts, color_);
     const Post* p = currentPost();
-    drawBar(0, right_x, right_w, p ? " " + p->title + " " : " post ", pane_ == Pane::Content,
-            color_);
+    const Panel right_panel{0, left_w, h - 1, w - left_w};
+    drawPanel(left_panel, feed_title + " (" + std::to_string(posts_.size()) + ")",
+              pane_ == Pane::Posts, color_);
+    drawPanel(right_panel, p ? p->title : " post ", pane_ == Pane::Content, color_);
 
-    attron(A_DIM);
-    for (int y = 0; y < 1 + rows; ++y) mvaddch(y, left, '|');
-    attroff(A_DIM);
+    const int rows = left_panel.innerRows();
+    const int inner_x = left_panel.innerLeft();
+    const int inner_w = left_panel.innerWidth();
+    if (rows < 1 || inner_w < 4) {
+        drawStatus(h, w);
+        return;
+    }
 
     if (post_selected_ < post_offset_) post_offset_ = post_selected_;
     if (post_selected_ >= post_offset_ + static_cast<size_t>(rows))
@@ -202,24 +244,27 @@ void App::drawPosts(int h, int w) {
         if (i >= posts_.size()) break;
         const Post& post = posts_[i];
         const std::string date = formatDate(post.published_at);
-        const int y = 1 + r;
+        const int y = left_panel.innerTop() + r;
         const bool sel = i == post_selected_;
+
         if (sel) {
             attron(sel_attr);
-            mvhline(y, 0, ' ', left);
-            mvaddnstr(y, 0, (" " + date + " " + post.title).c_str(), left - 1);
+            mvhline(y, inner_x, ' ', inner_w);
+            mvaddnstr(y, inner_x, (" " + date + " " + post.title).c_str(), inner_w);
             attroff(sel_attr);
             continue;
         }
-        mvaddnstr(y, 0, " ", 1);
+
+        mvaddnstr(y, inner_x, " ", 1);
         attron(pair(kPairMeta));
-        mvaddnstr(y, 1, date.c_str(), left - 2);
+        mvaddnstr(y, inner_x + 1, date.c_str(), std::max(0, inner_w - 2));
         attroff(pair(kPairMeta));
-        mvaddnstr(y, 1 + static_cast<int>(date.size()) + 1, post.title.c_str(),
-                  left - 2 - static_cast<int>(date.size()));
+        const int title_x = inner_x + 1 + static_cast<int>(date.size()) + 1;
+        mvaddnstr(y, title_x, post.title.c_str(), std::max(0, inner_x + inner_w - title_x));
     }
 
-    drawPostBody(1, right_x, right_w, h - 1);
+    drawPostBody(left_panel.top + 1, right_panel.innerLeft(), right_panel.innerWidth(),
+                 right_panel.top + right_panel.height - 1);
     drawStatus(h, w);
 }
 
@@ -228,14 +273,14 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
 
     const Post* p = currentPost();
     if (!p) {
-        mvaddnstr(top, x + 1, "Select a post.", width - 2);
+        mvaddnstr(top, x, "Select a post.", width);
         return;
     }
 
     int y = top;
     const int title_attr = A_BOLD | pair(kPairAccent);
     attron(title_attr);
-    mvaddnstr(y++, x + 1, p->title.c_str(), width - 2);
+    mvaddnstr(y++, x, p->title.c_str(), width);
     attroff(title_attr);
 
     std::string meta = p->author;
@@ -243,13 +288,13 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
     if (!date.empty()) meta += (meta.empty() ? "" : "  ") + date;
     if (!meta.empty()) {
         attron(pair(kPairMeta));
-        mvaddnstr(y++, x + 1, meta.c_str(), width - 2);
+        mvaddnstr(y++, x, meta.c_str(), width);
         attroff(pair(kPairMeta));
     }
     if (!p->url.empty()) {
         const int url_attr = A_DIM | pair(kPairLink);
         attron(url_attr);
-        mvaddnstr(y++, x + 1, p->url.c_str(), width - 2);
+        mvaddnstr(y++, x, p->url.c_str(), width);
         attroff(url_attr);
     }
 
@@ -257,11 +302,11 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
     const int avail = bottom - y;
     if (avail <= 0) return;
 
-    const text::Lines lines = text::renderHtml(p->scraped.empty() ? p->content : p->scraped,
-                                               width - 2);
+    const text::Lines lines =
+        text::renderHtml(p->scraped.empty() ? p->content : p->scraped, width);
     if (lines.empty()) {
         attron(A_DIM);
-        mvaddnstr(y, x + 1, "(this post has no content)", width - 2);
+        mvaddnstr(y, x, "(this post has no content)", width);
         attroff(A_DIM);
         return;
     }
@@ -271,12 +316,12 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
                               : 0;
     content_offset_ = std::min(content_offset_, content_max_offset_);
 
-    const int right = x + 1 + (width - 2);
+    const int right = x + width;
     for (int r = 0; r < avail; ++r) {
         const size_t i = content_offset_ + static_cast<size_t>(r);
         if (i >= lines.size()) break;
 
-        int col = x + 1;
+        int col = x;
         for (const text::Segment& seg : lines[i].segments) {
             const int room = right - col;
             if (room <= 0) break;
