@@ -3,6 +3,7 @@
 #include <sqlite3.h>
 
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <stdexcept>
 
@@ -59,6 +60,8 @@ void exec(const char* sql) {
     }
 }
 
+bool hasColumn(const char* table, const char* column);
+
 void migrate() {
     exec(R"(
         CREATE TABLE IF NOT EXISTS feeds (
@@ -81,6 +84,18 @@ void migrate() {
         );
         CREATE INDEX IF NOT EXISTS posts_by_feed ON posts(feed_id, published_at DESC);
     )");
+
+    if (!hasColumn("posts", "scraped")) {
+        exec("ALTER TABLE posts ADD COLUMN scraped TEXT NOT NULL DEFAULT ''");
+        exec("ALTER TABLE posts ADD COLUMN scraped_at INTEGER");
+    }
+}
+
+bool hasColumn(const char* table, const char* column) {
+    Stmt q(conn, ("PRAGMA table_info(" + std::string(table) + ")").c_str());
+    while (q.row())
+        if (q.colText(1) == column) return true;
+    return false;
 }
 
 std::optional<long long> colOptInt(sqlite3_stmt* s, int i) {
@@ -195,7 +210,8 @@ void upsertPosts(long long feed_id, const std::vector<Post>& posts) {
 
 std::vector<Post> posts(long long feed_id) {
     Stmt q(conn,
-           "SELECT id, guid, title, url, author, published_at, content, read_at FROM posts "
+           "SELECT id, guid, title, url, author, published_at, content, scraped, read_at "
+           "FROM posts "
            "WHERE feed_id = ? ORDER BY published_at DESC, id DESC");
     q.integer(1, feed_id);
     std::vector<Post> out;
@@ -209,10 +225,19 @@ std::vector<Post> posts(long long feed_id) {
         p.author = q.colText(4);
         p.published_at = colOptInt(q.s, 5);
         p.content = q.colText(6);
-        p.read = sqlite3_column_type(q.s, 7) != SQLITE_NULL;
+        p.scraped = q.colText(7);
+        p.read = sqlite3_column_type(q.s, 8) != SQLITE_NULL;
         out.push_back(std::move(p));
     }
     return out;
+}
+
+void setPostScraped(long long post_id, const std::string& html) {
+    Stmt q(conn, "UPDATE posts SET scraped = ?, scraped_at = ? WHERE id = ?");
+    q.text(1, html);
+    q.integer(2, static_cast<long long>(std::time(nullptr)));
+    q.integer(3, post_id);
+    q.step();
 }
 
 }  // namespace db

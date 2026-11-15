@@ -19,6 +19,7 @@ struct Post {
     std::string url;
     std::string author;
     std::string content;
+    std::string scraped;  // full article HTML fetched from the post's URL
     std::optional<long long> published_at;
     bool read = false;
 };
@@ -44,5 +45,8 @@ void markFetched(long long feed_id, long long unix_time);
 void upsertPosts(long long feed_id, const std::vector<Post>& posts);
 
 std::vector<Post> posts(long long feed_id);
+
+// Caches the scraped article HTML for a post.
+void setPostScraped(long long post_id, const std::string& html);
 
 }  // namespace db

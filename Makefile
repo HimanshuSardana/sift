@@ -9,7 +9,7 @@ TARGET   := sift
 SRC      := $(wildcard src/*.cpp)
 OBJ      := $(SRC:.cpp=.o)
 LIB_OBJ  := $(filter-out src/main.o,$(OBJ))
-TESTS    := tests/db_test tests/parse_test tests/text_test
+TESTS    := tests/db_test tests/parse_test tests/text_test tests/scrape_test
 
 .PHONY: all run test clean
 

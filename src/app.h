@@ -26,6 +26,7 @@ private:
     void reloadFeeds();
     void reloadPosts();
     void refetch();
+    void scrapeCurrentPost();
     void select(size_t index);
     void selectFeedById(long long id);
     void selectPost(size_t index);

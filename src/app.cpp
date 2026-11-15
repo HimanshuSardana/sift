@@ -6,15 +6,17 @@
 #include <cctype>
 #include <cstdint>
 #include <ctime>
+#include <stdexcept>
 
 #include "fetch.h"
+#include "scrape.h"
 #include "text.h"
 
 namespace {
 
 const char kHelpFeeds[] = " j/k move   a add feed   r refetch   Enter open   q quit ";
 const char kHelpPosts[] = " j/k move   l content   r refetch   Esc back   q quit ";
-const char kHelpContent[] = " j/k scroll   h posts   r refetch   Esc back   q quit ";
+const char kHelpContent[] = " j/k scroll   s scrape   h posts   r refetch   Esc back   q quit ";
 
 std::string trim(const std::string& s) {
     auto ws = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -202,7 +204,8 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
     const int avail = bottom - y;
     if (avail <= 0) return;
 
-    const text::Lines lines = text::renderHtml(p->content, width - 2);
+    const text::Lines lines = text::renderHtml(p->scraped.empty() ? p->content : p->scraped,
+                                               width - 2);
     if (lines.empty()) {
         mvaddnstr(y, x + 1, "(this post has no content)", width - 2);
         return;
@@ -288,6 +291,9 @@ void App::handleFeedsKey(int ch) {
             status_ = "Added feed: " + url;
             return;
         }
+        case 's':
+            if (pane_ == Pane::Content) scrapeCurrentPost();
+            return;
         case 'r':
             refetch();
             return;
@@ -361,11 +367,43 @@ void App::handlePostsKey(int ch) {
                 selectPost(posts_.size() - 1);
             }
             return;
+        case 's':
+            if (pane_ == Pane::Content) scrapeCurrentPost();
+            return;
         case 'r':
             refetch();
             return;
         default:
             return;
+    }
+}
+
+void App::scrapeCurrentPost() {
+    const Post* p = currentPost();
+    if (!p) {
+        status_ = "No post selected.";
+        return;
+    }
+    if (p->url.empty()) {
+        status_ = "This post has no URL to scrape.";
+        return;
+    }
+
+    const long long id = p->id;
+    const std::string url = p->url;
+    status_ = "Scraping " + url + " ...";
+    draw();
+
+    try {
+        const std::string html = scrape::article(url);
+        if (html.empty()) throw std::runtime_error("no article content found");
+        db::setPostScraped(id, html);
+        for (Post& post : posts_)
+            if (post.id == id) post.scraped = html;
+        content_offset_ = 0;
+        status_ = "Scraped " + std::to_string(html.size()) + " bytes.";
+    } catch (const std::exception& e) {
+        status_ = std::string("Scrape failed: ") + e.what();
     }
 }
 
