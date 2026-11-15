@@ -24,6 +24,7 @@ private:
     void handlePostsKey(int ch);
 
     void reloadFeeds();
+    void openPosts();
     void reloadPosts();
     void refetch();
     void scrapeCurrentPost();

@@ -23,9 +23,9 @@ constexpr short kPairOk = 5;      // success status
 constexpr short kPairErr = 6;     // failure status
 constexpr short kPairBar = 7;     // focused pane header
 
-const char kHelpFeeds[] = " j/k move   a add   d delete   r refetch   Enter open   q quit ";
-const char kHelpPosts[] = " j/k move   l content   r refetch   Esc back   q quit ";
-const char kHelpContent[] = " j/k scroll   s scrape   h posts   r refetch   Esc back   q quit ";
+const char kHelpFeeds[] = " j/k move   a add   d delete   r refetch   l open   q quit ";
+const char kHelpPosts[] = " j/k move   l content   h feeds   r refetch   q quit ";
+const char kHelpContent[] = " j/k scroll   s scrape   h posts   r refetch   q quit ";
 
 std::string trim(const std::string& s) {
     auto ws = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -278,11 +278,6 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
     }
 
     int y = top;
-    const int title_attr = A_BOLD | pair(kPairAccent);
-    attron(title_attr);
-    mvaddnstr(y++, x, p->title.c_str(), width);
-    attroff(title_attr);
-
     std::string meta = p->author;
     const std::string date = formatDate(p->published_at);
     if (!date.empty()) meta += (meta.empty() ? "" : "  ") + date;
@@ -417,18 +412,12 @@ void App::handleFeedsKey(int ch) {
         case 'r':
             refetch();
             return;
+        case 'l':
+        case KEY_RIGHT:
         case '\n':
         case '\r':
         case KEY_ENTER:
-            if (n) {
-                reloadPosts();
-                post_selected_ = 0;
-                post_offset_ = 0;
-                content_offset_ = 0;
-                pane_ = Pane::Posts;
-                view_ = View::Posts;
-                offset_ = 0;
-            }
+            if (n) openPosts();
             return;
         default:
             return;
@@ -437,14 +426,16 @@ void App::handleFeedsKey(int ch) {
 
 void App::handlePostsKey(int ch) {
     switch (ch) {
-        case 27:  // Esc returns to the feed list; h/l are reserved for focus.
-            view_ = View::Feeds;
-            offset_ = 0;
-            pane_ = Pane::Posts;
-            return;
+        case 27:  // Esc goes left, one level at a time
         case 'h':
         case KEY_LEFT:
-            pane_ = Pane::Posts;
+            if (pane_ == Pane::Content) {
+                pane_ = Pane::Posts;
+            } else {
+                view_ = View::Feeds;
+                pane_ = Pane::Posts;
+                offset_ = 0;
+            }
             return;
         case 'l':
         case KEY_RIGHT:
@@ -544,6 +535,16 @@ void App::scrapeCurrentPost() {
         status_ = std::string("Scrape failed: ") + e.what();
         status_error_ = true;
     }
+}
+
+void App::openPosts() {
+    reloadPosts();
+    post_selected_ = 0;
+    post_offset_ = 0;
+    content_offset_ = 0;
+    pane_ = Pane::Posts;
+    view_ = View::Posts;
+    offset_ = 0;
 }
 
 void App::reloadPosts() {
