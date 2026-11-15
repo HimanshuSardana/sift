@@ -41,6 +41,8 @@ private:
     size_t offset_ = 0;
     size_t post_selected_ = 0;
     size_t post_offset_ = 0;
+    size_t content_offset_ = 0;
+    size_t content_max_offset_ = 0;
     bool running_ = true;
     std::string status_;
 };

@@ -8,12 +8,13 @@
 #include <ctime>
 
 #include "fetch.h"
+#include "text.h"
 
 namespace {
 
 const char kHelpFeeds[] = " j/k move   a add feed   r refetch   Enter open   q quit ";
 const char kHelpPosts[] = " j/k move   l content   r refetch   Esc back   q quit ";
-const char kHelpContent[] = " h posts   r refetch   Esc back   q quit ";
+const char kHelpContent[] = " j/k scroll   h posts   r refetch   Esc back   q quit ";
 
 std::string trim(const std::string& s) {
     auto ws = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -190,7 +191,25 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
     }
 
     y++;
-    if (y < bottom) mvaddnstr(y, x + 1, "(post body rendering is not implemented yet)", width - 2);
+    const int avail = bottom - y;
+    if (avail <= 0) return;
+
+    const std::vector<std::string> lines = text::wrap(text::htmlToText(p->content), width - 2);
+    if (lines.empty()) {
+        mvaddnstr(y, x + 1, "(this post has no content)", width - 2);
+        return;
+    }
+
+    content_max_offset_ = lines.size() > static_cast<size_t>(avail)
+                              ? lines.size() - static_cast<size_t>(avail)
+                              : 0;
+    content_offset_ = std::min(content_offset_, content_max_offset_);
+
+    for (int r = 0; r < avail; ++r) {
+        const size_t i = content_offset_ + static_cast<size_t>(r);
+        if (i >= lines.size()) break;
+        mvaddnstr(y + r, x + 1, lines[i].c_str(), width - 2);
+    }
 }
 
 void App::drawStatus(int h, int w) {
@@ -260,6 +279,7 @@ void App::handleFeedsKey(int ch) {
                 reloadPosts();
                 post_selected_ = 0;
                 post_offset_ = 0;
+                content_offset_ = 0;
                 pane_ = Pane::Posts;
                 view_ = View::Posts;
                 offset_ = 0;
@@ -292,20 +312,35 @@ void App::handlePostsKey(int ch) {
             return;
         case 'j':
         case KEY_DOWN:
-            if (pane_ == Pane::Posts && post_selected_ + 1 < posts_.size())
+            if (pane_ == Pane::Content) {
+                if (content_offset_ < content_max_offset_) ++content_offset_;
+            } else if (post_selected_ + 1 < posts_.size()) {
                 selectPost(post_selected_ + 1);
+            }
             return;
         case 'k':
         case KEY_UP:
-            if (pane_ == Pane::Posts && post_selected_ > 0) selectPost(post_selected_ - 1);
+            if (pane_ == Pane::Content) {
+                if (content_offset_ > 0) --content_offset_;
+            } else if (post_selected_ > 0) {
+                selectPost(post_selected_ - 1);
+            }
             return;
         case 'g':
         case KEY_HOME:
-            if (pane_ == Pane::Posts && !posts_.empty()) selectPost(0);
+            if (pane_ == Pane::Content) {
+                content_offset_ = 0;
+            } else if (!posts_.empty()) {
+                selectPost(0);
+            }
             return;
         case 'G':
         case KEY_END:
-            if (pane_ == Pane::Posts && !posts_.empty()) selectPost(posts_.size() - 1);
+            if (pane_ == Pane::Content) {
+                content_offset_ = content_max_offset_;
+            } else if (!posts_.empty()) {
+                selectPost(posts_.size() - 1);
+            }
             return;
         case 'r':
             refetch();
@@ -319,6 +354,7 @@ void App::reloadPosts() {
     const Feed* f = current();
     posts_ = f ? db::posts(f->id) : std::vector<Post>{};
     post_selected_ = posts_.empty() ? 0 : std::min(post_selected_, posts_.size() - 1);
+    content_offset_ = 0;
     if (post_selected_ < post_offset_) post_offset_ = post_selected_;
 }
 
@@ -387,6 +423,7 @@ const Post* App::currentPost() const {
 void App::selectPost(size_t index) {
     if (posts_.empty()) return;
     post_selected_ = std::min(index, posts_.size() - 1);
+    content_offset_ = 0;
 }
 
 bool App::prompt(const char* label, std::string& out) {
