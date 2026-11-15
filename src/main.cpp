@@ -1,3 +1,4 @@
+#include <clocale>
 #include <cstdio>
 #include <exception>
 
@@ -5,6 +6,8 @@
 #include "db.h"
 
 int main() {
+    std::setlocale(LC_ALL, "");
+
     try {
         db::open(db::defaultPath());
     } catch (const std::exception& e) {

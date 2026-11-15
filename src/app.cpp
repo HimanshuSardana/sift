@@ -23,8 +23,13 @@ constexpr short kPairOk = 5;      // success status
 constexpr short kPairErr = 6;     // failure status
 constexpr short kPairBar = 7;     // focused pane header
 
+// Modified arrow keys are missing from most terminfo entries; bind the common
+// xterm and rxvt sequences to our own key codes.
+constexpr int kCtlLeft = KEY_MAX + 1;
+constexpr int kCtlRight = KEY_MAX + 2;
+
 const char kHelpFeeds[] = " j/k move   a add   d delete   r refetch   l open   q quit ";
-const char kHelpPosts[] = " j/k move   l content   h feeds   r refetch   q quit ";
+const char kHelpPosts[] = " j/k move  l content  h feeds  C-Left/Right resize  r refetch  q quit ";
 const char kHelpContent[] = " j/k scroll   s scrape   h posts   r refetch   q quit ";
 
 std::string trim(const std::string& s) {
@@ -132,6 +137,11 @@ void App::run() {
         init_pair(kPairBar, COLOR_BLACK, COLOR_CYAN);
     }
 
+    define_key("\033[1;5D", kCtlLeft);
+    define_key("\033[1;5C", kCtlRight);
+    define_key("\033[5D", kCtlLeft);
+    define_key("\033[5C", kCtlRight);
+
     reloadFeeds();
 
     while (running_) {
@@ -204,8 +214,7 @@ void App::drawPosts(int h, int w) {
     const Feed* f = current();
     const std::string feed_title = f ? (f->title.empty() ? f->url : f->title) : std::string();
 
-    int left_w = std::max(18, w * 20 / 100);
-    if (left_w > w - 12) left_w = std::max(10, w / 2);
+    const int left_w = leftWidth(w);
     const Panel left_panel{0, 0, h - 1, left_w};
 
     if (posts_.empty()) {
@@ -502,9 +511,21 @@ void App::handlePostsKey(int ch) {
         case 'r':
             refetch();
             return;
+        case kCtlLeft:
+            left_pct_ = std::max(10, left_pct_ - 5);
+            return;
+        case kCtlRight:
+            left_pct_ = std::min(60, left_pct_ + 5);
+            return;
         default:
             return;
     }
+}
+
+int App::leftWidth(int w) const {
+    int left = std::max(18, w * left_pct_ / 100);
+    if (left > w - 12) left = std::max(10, w / 2);
+    return std::min(left, w - 4);
 }
 
 void App::scrapeCurrentPost() {

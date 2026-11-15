@@ -35,6 +35,7 @@ private:
     const Post* currentPost() const;
     bool prompt(const char* label, std::string& out);
     int pair(short slot) const;
+    int leftWidth(int w) const;
     int attrFor(unsigned style) const;
     bool confirm(const std::string& question);
 
@@ -48,6 +49,7 @@ private:
     size_t post_offset_ = 0;
     size_t content_offset_ = 0;
     size_t content_max_offset_ = 0;
+    int left_pct_ = 20;
     bool running_ = true;
     bool color_ = false;
     bool status_error_ = false;
