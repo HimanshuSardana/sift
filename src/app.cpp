@@ -28,8 +28,8 @@ constexpr short kPairBar = 7;     // focused pane header
 constexpr int kCtlLeft = KEY_MAX + 1;
 constexpr int kCtlRight = KEY_MAX + 2;
 
-const char kHelpFeeds[] = " j/k move   a add   d delete   r refetch   l open   q quit ";
-const char kHelpPosts[] = " j/k move  l content  h feeds  C-Left/Right resize  r refetch  q quit ";
+const char kHelpFeeds[] = " j/k move  a add  d delete  r refetch  / search  l open  q quit ";
+const char kHelpPosts[] = " j/k move  l content  h feeds  / search  n next  q quit ";
 const char kHelpContent[] = " j/k scroll   s scrape   h posts   r refetch   q quit ";
 
 std::string trim(const std::string& s) {
@@ -37,6 +37,17 @@ std::string trim(const std::string& s) {
     auto b = std::find_if_not(s.begin(), s.end(), ws);
     auto e = std::find_if_not(s.rbegin(), s.rend(), ws).base();
     return b < e ? std::string(b, e) : std::string();
+}
+
+std::string lowerCase(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (const char c : s) out += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
+bool contains(const std::string& haystack, const std::string& needle) {
+    return haystack.find(needle) != std::string::npos;
 }
 
 std::string formatDate(const std::optional<long long>& ts) {
@@ -324,17 +335,20 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
     for (int r = 0; r < avail; ++r) {
         const size_t i = content_offset_ + static_cast<size_t>(r);
         if (i >= lines.size()) break;
+        drawLine(y + r, x, right, lines[i]);
+    }
+}
 
-        int col = x;
-        for (const text::Segment& seg : lines[i].segments) {
-            const int room = right - col;
-            if (room <= 0) break;
-            const int attr = attrFor(seg.style);
-            attron(attr);
-            mvaddnstr(y + r, col, seg.text.c_str(), room);
-            attroff(attr);
-            col += static_cast<int>(seg.text.size());
-        }
+void App::drawLine(int y, int x, int right, const text::Line& line) {
+    int col = x;
+    for (const text::Segment& seg : line.segments) {
+        const int room = right - col;
+        if (room <= 0) break;
+        const int attr = attrFor(seg.style);
+        attron(attr);
+        mvaddnstr(y, col, seg.text.c_str(), room);
+        attroff(attr);
+        col += static_cast<int>(seg.text.size());
     }
 }
 
@@ -385,13 +399,22 @@ void App::handleFeedsKey(int ch) {
         case KEY_END:
             if (n) select(n - 1);
             return;
+        case '/':
+            beginSearch();
+            return;
+        case 'n':
+            findNext(1, false);
+            return;
+        case 'N':
+            findNext(-1, false);
+            return;
         case 'a': {
             std::string url;
             if (!prompt("Feed URL: ", url)) {
                 status_ = "Add cancelled.";
                 return;
             }
-            long long id = db::addFeed(url, url);
+            const long long id = db::addFeed(url, url);
             reloadFeeds();
             selectFeedById(id);
             status_ = "Added feed: " + url;
@@ -415,9 +438,6 @@ void App::handleFeedsKey(int ch) {
             status_ = "Deleted feed: " + label;
             return;
         }
-        case 's':
-            if (pane_ == Pane::Content) scrapeCurrentPost();
-            return;
         case 'r':
             refetch();
             return;
@@ -487,24 +507,15 @@ void App::handlePostsKey(int ch) {
                 selectPost(posts_.size() - 1);
             }
             return;
-        case 'd': {
-            const Feed* f = current();
-            if (!f) {
-                status_ = "No feed selected.";
-                return;
-            }
-            const long long id = f->id;
-            const std::string label = f->title.empty() ? f->url : f->title;
-            if (!confirm("Delete feed \"" + label + "\" and its posts?")) {
-                status_ = "Delete cancelled.";
-                return;
-            }
-            db::removeFeed(id);
-            reloadFeeds();
-            reloadPosts();
-            status_ = "Deleted feed: " + label;
+        case '/':
+            beginSearch();
             return;
-        }
+        case 'n':
+            findNext(1, false);
+            return;
+        case 'N':
+            findNext(-1, false);
+            return;
         case 's':
             if (pane_ == Pane::Content) scrapeCurrentPost();
             return;
@@ -520,6 +531,92 @@ void App::handlePostsKey(int ch) {
         default:
             return;
     }
+}
+
+void App::beginSearch() {
+    std::string q;
+    if (!prompt("Search: ", q)) {
+        status_ = "Search cancelled.";
+        return;
+    }
+    query_ = q;
+    findNext(1, true);
+}
+
+void App::findNext(int dir, bool inclusive) {
+    if (query_.empty()) {
+        status_ = "Nothing to search for; press / first.";
+        return;
+    }
+    const std::string needle = lowerCase(query_);
+    const std::string miss = "No match: " + query_;
+
+    if (view_ == View::Feeds) {
+        const size_t n = feeds_.size();
+        if (n == 0) return;
+        size_t i = selected_;
+        for (size_t step = 0; step <= n; ++step, i = (i + n + dir) % n) {
+            if (step == 0 && !inclusive) continue;
+            const std::string label = feeds_[i].title.empty() ? feeds_[i].url : feeds_[i].title;
+            if (contains(lowerCase(label), needle)) {
+                select(i);
+                status_ = "Match: " + label;
+                return;
+            }
+        }
+        status_ = miss;
+        status_error_ = true;
+        return;
+    }
+
+    if (pane_ == Pane::Posts) {
+        const size_t n = posts_.size();
+        if (n == 0) return;
+        size_t i = post_selected_;
+        for (size_t step = 0; step <= n; ++step, i = (i + n + dir) % n) {
+            if (step == 0 && !inclusive) continue;
+            if (contains(lowerCase(posts_[i].title), needle)) {
+                selectPost(i);
+                status_ = "Match: " + posts_[i].title;
+                return;
+            }
+        }
+        status_ = miss;
+        status_error_ = true;
+        return;
+    }
+
+    const text::Lines lines = contentLines();
+    if (lines.empty()) {
+        status_ = "Nothing to search in this post.";
+        return;
+    }
+    const long count = static_cast<long>(lines.size());
+    const long start = static_cast<long>(content_offset_) + (inclusive ? 0 : dir);
+    for (long k = 0; k < count; ++k) {
+        const long idx = start + dir * k;
+        if (idx < 0 || idx >= count) break;
+        std::string text;
+        for (const text::Segment& seg : lines[static_cast<size_t>(idx)].segments) text += seg.text;
+        if (contains(lowerCase(text), needle)) {
+            content_offset_ = static_cast<size_t>(std::max(0L, idx - 2));
+            status_ = "Match at line " + std::to_string(idx + 1);
+            return;
+        }
+    }
+    status_ = miss;
+    status_error_ = true;
+}
+
+int App::contentWidth() const {
+    int w = getmaxx(stdscr);
+    return std::max(4, w - leftWidth(w) - 2);
+}
+
+text::Lines App::contentLines() const {
+    const Post* p = currentPost();
+    if (!p) return {};
+    return text::renderHtml(p->scraped.empty() ? p->content : p->scraped, contentWidth());
 }
 
 int App::leftWidth(int w) const {

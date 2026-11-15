@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "db.h"
+#include "text.h"
 
 enum class View { Feeds, Posts };
 enum class Pane { Posts, Content };
@@ -18,12 +19,17 @@ private:
     void drawFeeds(int h, int w);
     void drawPosts(int h, int w);
     void drawPostBody(int top, int x, int width, int bottom);
+    void drawLine(int y, int x, int right, const text::Line& line);
     void drawStatus(int h, int w);
     void handleKey(int ch);
     void handleFeedsKey(int ch);
     void handlePostsKey(int ch);
 
     void reloadFeeds();
+    void beginSearch();
+    void findNext(int dir, bool inclusive);
+    int contentWidth() const;
+    text::Lines contentLines() const;
     void openPosts();
     void reloadPosts();
     void refetch();
@@ -49,6 +55,7 @@ private:
     size_t post_offset_ = 0;
     size_t content_offset_ = 0;
     size_t content_max_offset_ = 0;
+    std::string query_;
     int left_pct_ = 20;
     bool running_ = true;
     bool color_ = false;
