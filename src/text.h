@@ -5,11 +5,27 @@
 
 namespace text {
 
-// Turns an HTML fragment into plain text: tags dropped, block elements
-// become paragraph breaks, entities decoded, whitespace collapsed.
-std::string htmlToText(const std::string& html);
+enum Style : unsigned {
+    kPlain = 0,
+    kBold = 1u << 0,
+    kDim = 1u << 1,
+    kUnderline = 1u << 2,
+};
 
-// Greedy word wrap that keeps paragraph breaks and hard-splits long words.
-std::vector<std::string> wrap(const std::string& text, int width);
+struct Segment {
+    std::string text;
+    unsigned style = kPlain;
+};
+
+struct Line {
+    std::vector<Segment> segments;
+};
+
+using Lines = std::vector<Line>;
+
+// Renders an HTML fragment into styled lines wrapped to width columns:
+// headings and <strong> bold, links underlined with their href appended,
+// list items bulleted or numbered, quotes and code dimmed.
+Lines renderHtml(const std::string& html, int width);
 
 }  // namespace text

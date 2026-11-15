@@ -33,6 +33,14 @@ std::string formatDate(const std::optional<long long>& ts) {
     return buf;
 }
 
+int attrFor(unsigned style) {
+    int attr = A_NORMAL;
+    if (style & text::kBold) attr |= A_BOLD;
+    if (style & text::kDim) attr |= A_DIM;
+    if (style & text::kUnderline) attr |= A_UNDERLINE;
+    return attr;
+}
+
 void drawBar(int y, int x, int width, const std::string& text, bool focused) {
     if (width <= 1) return;
     const int attr = focused ? A_REVERSE : A_REVERSE | A_DIM;
@@ -194,7 +202,7 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
     const int avail = bottom - y;
     if (avail <= 0) return;
 
-    const std::vector<std::string> lines = text::wrap(text::htmlToText(p->content), width - 2);
+    const text::Lines lines = text::renderHtml(p->content, width - 2);
     if (lines.empty()) {
         mvaddnstr(y, x + 1, "(this post has no content)", width - 2);
         return;
@@ -205,10 +213,21 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
                               : 0;
     content_offset_ = std::min(content_offset_, content_max_offset_);
 
+    const int right = x + 1 + (width - 2);
     for (int r = 0; r < avail; ++r) {
         const size_t i = content_offset_ + static_cast<size_t>(r);
         if (i >= lines.size()) break;
-        mvaddnstr(y + r, x + 1, lines[i].c_str(), width - 2);
+
+        int col = x + 1;
+        for (const text::Segment& seg : lines[i].segments) {
+            const int room = right - col;
+            if (room <= 0) break;
+            const int attr = attrFor(seg.style);
+            attron(attr);
+            mvaddnstr(y + r, col, seg.text.c_str(), room);
+            attroff(attr);
+            col += static_cast<int>(seg.text.size());
+        }
     }
 }
 
