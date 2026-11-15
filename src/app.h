@@ -20,18 +20,23 @@ private:
     void drawPosts(int h, int w);
     void drawPostBody(int top, int x, int width, int bottom);
     void drawFocus(int h, int w);
+    void drawPalette(int h, int w);
     void drawLine(int y, int x, int right, const text::Line& line);
     void drawStatus(int h, int w);
     void handleKey(int ch);
     void handleFeedsKey(int ch);
     void handlePostsKey(int ch);
     void handleFocusKey(int ch);
+    void handlePaletteKey(int ch);
 
     void reloadFeeds();
     void beginSearch();
     void findNext(int dir, bool inclusive);
     int contentWidth() const;
     text::Lines contentLines() const;
+    void openLinkPalette();
+    void openSelectedLink();
+    std::vector<size_t> paletteMatches() const;
     void openInBrowser();
     void openPosts();
     void reloadPosts();
@@ -59,6 +64,10 @@ private:
     size_t content_offset_ = 0;
     size_t content_max_offset_ = 0;
     bool focus_ = false;
+    bool palette_ = false;
+    std::string palette_query_;
+    size_t palette_selected_ = 0;
+    std::vector<text::Link> palette_links_;
     std::string query_;
     int left_pct_ = 20;
     bool running_ = true;

@@ -286,6 +286,45 @@ void walk(xmlNode* n, unsigned style, State& st) {
     }
 }
 
+std::string nodeText(xmlNode* n) {
+    xmlChar* c = xmlNodeGetContent(n);
+    std::string raw = c ? reinterpret_cast<const char*>(c) : "";
+    if (c) xmlFree(c);
+
+    std::string out;
+    bool space = false;
+    for (const char ch : raw) {
+        if (std::isspace(static_cast<unsigned char>(ch)) != 0) {
+            space = !out.empty();
+            continue;
+        }
+        if (space) {
+            out += ' ';
+            space = false;
+        }
+        out += ch;
+    }
+    return out;
+}
+
+void walkLinks(xmlNode* n, std::vector<text::Link>& out) {
+    for (; n; n = n->next) {
+        if (n->type != XML_ELEMENT_NODE) continue;
+        const std::string name = lowerName(n);
+        if (name == "a") {
+            const std::string href = attr(n, "href");
+            if (isHttpUrl(href)) {
+                std::string label = nodeText(n);
+                if (label.empty()) label = href;
+                bool seen = false;
+                for (const text::Link& l : out) seen = seen || l.href == href;
+                if (!seen) out.push_back(text::Link{label, href});
+            }
+        }
+        walkLinks(n->children, out);
+    }
+}
+
 void appendSegment(text::Line& line, const std::string& s, unsigned style) {
     if (s.empty()) return;
     if (!line.segments.empty() && line.segments.back().style == style) {
@@ -400,6 +439,18 @@ void layout(const Block& block, int width, text::Lines& out) {
 }  // namespace
 
 namespace text {
+
+std::vector<Link> links(const std::string& html) {
+    std::vector<Link> out;
+    std::unique_ptr<xmlDoc, DocFree> doc(
+        htmlReadMemory(html.c_str(), static_cast<int>(html.size()), nullptr, nullptr,
+                       HTML_PARSE_RECOVER | HTML_PARSE_NOERROR | HTML_PARSE_NOWARNING |
+                           HTML_PARSE_NONET));
+    if (!doc) return out;
+    xmlNode* root = xmlDocGetRootElement(doc.get());
+    if (root) walkLinks(root, out);
+    return out;
+}
 
 Lines renderHtml(const std::string& html, int width) {
     Lines out;

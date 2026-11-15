@@ -29,12 +29,14 @@ constexpr short kPairBar = 7;     // focused pane header
 
 // Modified arrow keys are missing from most terminfo entries; bind the common
 // xterm and rxvt sequences to our own key codes.
+constexpr int ctrlKey(char c) { return c & 0x1f; }
+
 constexpr int kCtlLeft = KEY_MAX + 1;
 constexpr int kCtlRight = KEY_MAX + 2;
 
 const char kHelpFeeds[] = " j/k move  a add  d delete  r refetch  / search  l open  q quit ";
-const char kHelpPosts[] = " j/k move  l content  h feeds  / search  n next  f focus  q quit ";
-const char kHelpContent[] = " j/k scroll  s scrape  o open  / search  f focus  h posts  q quit ";
+const char kHelpPosts[] = " j/k move  l content  h feeds  f links  C-f focus  / search  q quit ";
+const char kHelpContent[] = " j/k scroll  s scrape  o open  f links  C-f focus  / search  q quit ";
 
 std::string trim(const std::string& s) {
     auto ws = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -215,6 +217,12 @@ void App::draw() {
         drawFeeds(h, w);
     } else {
         drawPosts(h, w);
+    }
+
+    if (palette_) {
+        drawPalette(h, w);
+    } else {
+        curs_set(0);
     }
     refresh();
 }
@@ -426,7 +434,7 @@ void App::drawFocus(int h, int w) {
 
 void App::handleFocusKey(int ch) {
     switch (ch) {
-        case 'f':
+        case ctrlKey('F'):
         case 'h':
         case KEY_LEFT:
         case 27:
@@ -464,12 +472,174 @@ void App::handleFocusKey(int ch) {
         case 'o':
             openInBrowser();
             return;
+        case 'f':
+            openLinkPalette();
+            return;
         case 'r':
             refetch();
             return;
         default:
             return;
     }
+}
+
+void App::openLinkPalette() {
+    const Post* p = currentPost();
+    if (!p) {
+        status_ = "No post selected.";
+        return;
+    }
+
+    palette_links_ = text::links(p->scraped.empty() ? p->content : p->scraped);
+    if (palette_links_.empty()) {
+        status_ = "This post has no links.";
+        return;
+    }
+
+    palette_query_.clear();
+    palette_selected_ = 0;
+    palette_ = true;
+}
+
+std::vector<size_t> App::paletteMatches() const {
+    const std::string needle = lowerCase(palette_query_);
+    std::vector<size_t> out;
+    for (size_t i = 0; i < palette_links_.size(); ++i) {
+        const text::Link& l = palette_links_[i];
+        if (needle.empty() || contains(lowerCase(l.text), needle) ||
+            contains(lowerCase(l.href), needle))
+            out.push_back(i);
+    }
+    return out;
+}
+
+void App::openSelectedLink() {
+    const std::vector<size_t> matches = paletteMatches();
+    if (matches.empty()) {
+        palette_ = false;
+        status_ = "No matching link.";
+        status_error_ = true;
+        return;
+    }
+    if (palette_selected_ >= matches.size()) palette_selected_ = matches.size() - 1;
+
+    const std::string href = palette_links_[matches[palette_selected_]].href;
+    palette_ = false;
+
+    if (!launchOpener(href)) {
+        status_ = "Could not launch a browser.";
+        status_error_ = true;
+        return;
+    }
+    status_ = "Opened in browser: " + href;
+}
+
+void App::handlePaletteKey(int ch) {
+    switch (ch) {
+        case 27:
+            palette_ = false;
+            return;
+        case '\n':
+        case '\r':
+        case KEY_ENTER:
+            openSelectedLink();
+            return;
+        case ctrlKey('N'):
+        case KEY_DOWN: {
+            const std::vector<size_t> matches = paletteMatches();
+            if (palette_selected_ + 1 < matches.size()) ++palette_selected_;
+            return;
+        }
+        case ctrlKey('P'):
+        case KEY_UP:
+            if (palette_selected_ > 0) --palette_selected_;
+            return;
+        case KEY_BACKSPACE:
+        case 127:
+        case 8:
+            if (!palette_query_.empty()) palette_query_.pop_back();
+            palette_selected_ = 0;
+            return;
+        case ctrlKey('U'):
+            palette_query_.clear();
+            palette_selected_ = 0;
+            return;
+        default:
+            if (ch >= 32 && ch < 127) {
+                palette_query_ += static_cast<char>(ch);
+                palette_selected_ = 0;
+            }
+            return;
+    }
+}
+
+void App::drawPalette(int h, int w) {
+    const std::vector<size_t> matches = paletteMatches();
+    if (matches.empty()) {
+        palette_selected_ = 0;
+    } else if (palette_selected_ >= matches.size()) {
+        palette_selected_ = matches.size() - 1;
+    }
+
+    int width = std::min(w - 4, 76);
+    if (width < 24) width = std::max(10, w - 2);
+    int height = std::min(h - 4, 20);
+    if (height < 8) height = std::max(6, h - 2);
+
+    const Panel box{std::max(0, (h - height) / 2), std::max(0, (w - width) / 2), height, width};
+    drawPanel(box, "links (" + std::to_string(matches.size()) + "/" +
+                       std::to_string(palette_links_.size()) + ")",
+              true, color_);
+
+    const int rows = box.innerRows();
+    const int inner_x = box.innerLeft();
+    const int inner_w = box.innerWidth();
+    if (rows < 4 || inner_w < 8) return;
+
+    // The palette floats over the article, so blank its whole interior first.
+    for (int r = 0; r < rows; ++r) mvhline(box.innerTop() + r, inner_x, ' ', inner_w);
+
+    attron(A_BOLD);
+    mvaddnstr(box.innerTop(), inner_x, ("> " + palette_query_).c_str(), inner_w);
+    attroff(A_BOLD);
+
+    const int visible = rows - 3;
+    size_t offset = 0;
+    if (palette_selected_ >= static_cast<size_t>(visible))
+        offset = palette_selected_ - static_cast<size_t>(visible) + 1;
+
+    for (int r = 0; r < visible; ++r) {
+        const size_t i = offset + static_cast<size_t>(r);
+        if (i >= matches.size()) break;
+
+        const text::Link& link = palette_links_[matches[i]];
+        const std::string label = " " + link.text + "  " + link.href;
+        const int y = box.innerTop() + 2 + r;
+
+        if (i == palette_selected_) {
+            attron(A_REVERSE);
+            mvhline(y, inner_x, ' ', inner_w);
+            mvaddnstr(y, inner_x, label.c_str(), inner_w);
+            attroff(A_REVERSE);
+        } else {
+            mvaddnstr(y, inner_x, " ", 1);
+            attron(pair(kPairTitle));
+            mvaddnstr(y, inner_x + 1, link.text.c_str(), inner_w - 1);
+            attroff(pair(kPairTitle));
+            attron(A_DIM);
+            mvaddnstr(y, inner_x + 2 + static_cast<int>(link.text.size()), link.href.c_str(),
+                      std::max(0, inner_w - 3 - static_cast<int>(link.text.size())));
+            attroff(A_DIM);
+        }
+    }
+
+    attron(A_DIM);
+    mvaddnstr(box.innerTop() + rows - 1, inner_x, "^N/^P move  Enter open  Esc close", inner_w);
+    attroff(A_DIM);
+
+    curs_set(1);
+    move(box.innerTop(), inner_x + std::min<int>(2 + static_cast<int>(palette_query_.size()),
+                                                 std::max(0, inner_w - 1)));
 }
 
 void App::drawStatus(int h, int w) {
@@ -488,6 +658,10 @@ void App::drawStatus(int h, int w) {
 }
 
 void App::handleKey(int ch) {
+    if (palette_) {
+        handlePaletteKey(ch);
+        return;
+    }
     if (ch == 'q') {
         running_ = false;
         return;
@@ -639,6 +813,9 @@ void App::handlePostsKey(int ch) {
             findNext(-1, false);
             return;
         case 'f':
+            openLinkPalette();
+            return;
+        case ctrlKey('F'):
             focus_ = true;
             return;
         case 's':

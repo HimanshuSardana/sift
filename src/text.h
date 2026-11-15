@@ -23,6 +23,14 @@ struct Line {
 
 using Lines = std::vector<Line>;
 
+struct Link {
+    std::string text;  // anchor text, or the href when the anchor is empty
+    std::string href;
+};
+
+// External links in document order, de-duplicated by href.
+std::vector<Link> links(const std::string& html);
+
 // Renders an HTML fragment into styled lines wrapped to width columns:
 // headings and <strong> bold, links underlined with their href appended,
 // list items bulleted or numbered, quotes and code dimmed.

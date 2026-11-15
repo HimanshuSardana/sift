@@ -119,6 +119,19 @@ void testPreIndent() {
     require(plain(inline_code) == "use a b here", "inline code still collapses spaces");
 }
 
+void testLinkList() {
+    const auto l = text::links(
+        "<p><a href=\"https://a.test/1\">First</a> and <a href=\"/relative\">rel</a> and "
+        "<a href=\"https://a.test/2\">  spaced   label </a></p>"
+        "<p><a href=\"https://a.test/1\">Duplicate</a> <a href=\"https://a.test/3\"></a></p>");
+    require(l.size() == 3, "only external, unique links: " + std::to_string(l.size()));
+    require(l[0].text == "First" && l[0].href == "https://a.test/1", "first link");
+    require(l[1].text == "spaced label" && l[1].href == "https://a.test/2", "whitespace collapsed");
+    require(l[2].href == "https://a.test/3" && l[2].text == "https://a.test/3",
+            "empty anchor falls back to the href");
+    require(text::links("<p>no links</p>").empty(), "no links");
+}
+
 void testListWrapIndent() {
     const auto lines =
         text::renderHtml("<ul><li>alpha beta gamma delta epsilon</li></ul>", 16);
@@ -132,10 +145,11 @@ void testListWrapIndent() {
 int main() {
     testStructure();
     testEntitiesAndJunk();
-    testLinks();
+    testLinkList();
     testListsAndQuotes();
     testWrapAndPre();
     testPreIndent();
+    testLinkList();
     testListWrapIndent();
     std::puts("text tests passed");
     return 0;
