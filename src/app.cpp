@@ -14,6 +14,15 @@
 
 namespace {
 
+// Standard eight terminal colours only, so the theme decides the exact shades.
+constexpr short kPairTitle = 1;   // feed and post titles
+constexpr short kPairMeta = 2;    // dates, authors, secondary hints
+constexpr short kPairLink = 3;    // links and emphasised text
+constexpr short kPairAccent = 4;  // headings and strong text
+constexpr short kPairOk = 5;      // success status
+constexpr short kPairErr = 6;     // failure status
+constexpr short kPairBar = 7;     // focused pane header
+
 const char kHelpFeeds[] = " j/k move   a add   d delete   r refetch   Enter open   q quit ";
 const char kHelpPosts[] = " j/k move   l content   r refetch   Esc back   q quit ";
 const char kHelpContent[] = " j/k scroll   s scrape   h posts   r refetch   Esc back   q quit ";
@@ -35,17 +44,10 @@ std::string formatDate(const std::optional<long long>& ts) {
     return buf;
 }
 
-int attrFor(unsigned style) {
-    int attr = A_NORMAL;
-    if (style & text::kBold) attr |= A_BOLD;
-    if (style & text::kDim) attr |= A_DIM;
-    if (style & text::kUnderline) attr |= A_UNDERLINE;
-    return attr;
-}
-
-void drawBar(int y, int x, int width, const std::string& text, bool focused) {
+void drawBar(int y, int x, int width, const std::string& text, bool focused, bool color) {
     if (width <= 1) return;
-    const int attr = focused ? A_REVERSE : A_REVERSE | A_DIM;
+    int attr = focused ? A_BOLD : A_DIM;
+    attr |= color ? COLOR_PAIR(kPairBar) : A_REVERSE;
     attron(attr);
     mvhline(y, x, ' ', width);
     mvaddnstr(y, x, text.c_str(), width);
@@ -53,6 +55,26 @@ void drawBar(int y, int x, int width, const std::string& text, bool focused) {
 }
 
 }  // namespace
+
+int App::pair(short slot) const { return color_ ? COLOR_PAIR(slot) : A_NORMAL; }
+
+int App::attrFor(unsigned style) const {
+    int attr = A_NORMAL;
+    if (style & text::kBold) attr |= A_BOLD;
+    if (style & text::kUnderline) attr |= A_UNDERLINE;
+    if (style & text::kDim) attr |= A_DIM;
+
+    short slot = 0;
+    if (style & text::kUnderline) {
+        slot = kPairLink;
+    } else if (style & text::kBold) {
+        slot = kPairAccent;
+    } else if (style & text::kDim) {
+        slot = kPairMeta;
+    }
+    if (slot) attr |= pair(slot);
+    return attr;
+}
 
 void App::run() {
     initscr();
@@ -62,12 +84,25 @@ void App::run() {
     curs_set(0);
     set_escdelay(25);
 
+    if (has_colors() && use_default_colors() == OK) {
+        start_color();
+        color_ = true;
+        init_pair(kPairTitle, COLOR_CYAN, -1);
+        init_pair(kPairMeta, COLOR_YELLOW, -1);
+        init_pair(kPairLink, COLOR_BLUE, -1);
+        init_pair(kPairAccent, COLOR_MAGENTA, -1);
+        init_pair(kPairOk, COLOR_GREEN, -1);
+        init_pair(kPairErr, COLOR_RED, -1);
+        init_pair(kPairBar, COLOR_BLACK, COLOR_CYAN);
+    }
+
     reloadFeeds();
 
     while (running_) {
         draw();
         int ch = getch();
         status_.clear();
+        status_error_ = false;
         handleKey(ch);
     }
 
@@ -90,15 +125,14 @@ void App::draw() {
 }
 
 void App::drawFeeds(int h, int w) {
-    std::string header = " sift - feeds (" + std::to_string(feeds_.size()) + ") ";
-    attron(A_REVERSE);
-    mvhline(0, 0, ' ', w);
-    mvaddnstr(0, 0, header.c_str(), w - 1);
-    attroff(A_REVERSE);
+    const std::string header = " sift - feeds (" + std::to_string(feeds_.size()) + ") ";
+    drawBar(0, 0, w, header, true, color_);
 
     const int rows = h - 2;
     if (feeds_.empty()) {
+        attron(pair(kPairMeta));
         mvaddnstr(1, 2, "No feeds yet. Press 'a' to add one.", w - 3);
+        attroff(pair(kPairMeta));
         drawStatus(h, w);
         return;
     }
@@ -113,12 +147,17 @@ void App::drawFeeds(int h, int w) {
         const std::string label = " " + (f.title.empty() ? f.url : f.title);
         const int y = 1 + r;
         const bool sel = i == selected_;
+        int attr = A_NORMAL;
         if (sel) {
-            attron(A_REVERSE);
+            attr |= A_REVERSE;
+            attron(attr);
             mvhline(y, 0, ' ', w);
+        } else {
+            attr |= pair(kPairTitle);
+            attron(attr);
         }
         mvaddnstr(y, 0, label.c_str(), w - 1);
-        if (sel) attroff(A_REVERSE);
+        attroff(attr);
     }
 
     drawStatus(h, w);
@@ -135,18 +174,23 @@ void App::drawPosts(int h, int w) {
     const int rows = h - 2;
 
     if (posts_.empty()) {
-        drawBar(0, 0, w, " " + feed_title + " (0) ", pane_ == Pane::Posts);
+        drawBar(0, 0, w, " " + feed_title + " (0) ", pane_ == Pane::Posts, color_);
+        attron(pair(kPairMeta));
         mvaddnstr(2, 2, "No posts yet. Press r to refetch.", w - 3);
+        attroff(pair(kPairMeta));
         drawStatus(h, w);
         return;
     }
 
     drawBar(0, 0, left, " " + feed_title + " (" + std::to_string(posts_.size()) + ") ",
-            pane_ == Pane::Posts);
+            pane_ == Pane::Posts, color_);
     const Post* p = currentPost();
-    drawBar(0, right_x, right_w, p ? " " + p->title + " " : " post ", pane_ == Pane::Content);
+    drawBar(0, right_x, right_w, p ? " " + p->title + " " : " post ", pane_ == Pane::Content,
+            color_);
 
+    attron(A_DIM);
     for (int y = 0; y < 1 + rows; ++y) mvaddch(y, left, '|');
+    attroff(A_DIM);
 
     if (post_selected_ < post_offset_) post_offset_ = post_selected_;
     if (post_selected_ >= post_offset_ + static_cast<size_t>(rows))
@@ -157,15 +201,22 @@ void App::drawPosts(int h, int w) {
         const size_t i = post_offset_ + static_cast<size_t>(r);
         if (i >= posts_.size()) break;
         const Post& post = posts_[i];
-        const std::string label = " " + formatDate(post.published_at) + " " + post.title;
+        const std::string date = formatDate(post.published_at);
         const int y = 1 + r;
         const bool sel = i == post_selected_;
         if (sel) {
             attron(sel_attr);
             mvhline(y, 0, ' ', left);
+            mvaddnstr(y, 0, (" " + date + " " + post.title).c_str(), left - 1);
+            attroff(sel_attr);
+            continue;
         }
-        mvaddnstr(y, 0, label.c_str(), left - 1);
-        if (sel) attroff(sel_attr);
+        mvaddnstr(y, 0, " ", 1);
+        attron(pair(kPairMeta));
+        mvaddnstr(y, 1, date.c_str(), left - 2);
+        attroff(pair(kPairMeta));
+        mvaddnstr(y, 1 + static_cast<int>(date.size()) + 1, post.title.c_str(),
+                  left - 2 - static_cast<int>(date.size()));
     }
 
     drawPostBody(1, right_x, right_w, h - 1);
@@ -182,22 +233,24 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
     }
 
     int y = top;
-    attron(A_BOLD);
+    const int title_attr = A_BOLD | pair(kPairAccent);
+    attron(title_attr);
     mvaddnstr(y++, x + 1, p->title.c_str(), width - 2);
-    attroff(A_BOLD);
+    attroff(title_attr);
 
     std::string meta = p->author;
     const std::string date = formatDate(p->published_at);
     if (!date.empty()) meta += (meta.empty() ? "" : "  ") + date;
     if (!meta.empty()) {
-        attron(A_DIM);
+        attron(pair(kPairMeta));
         mvaddnstr(y++, x + 1, meta.c_str(), width - 2);
-        attroff(A_DIM);
+        attroff(pair(kPairMeta));
     }
     if (!p->url.empty()) {
-        attron(A_DIM);
+        const int url_attr = A_DIM | pair(kPairLink);
+        attron(url_attr);
         mvaddnstr(y++, x + 1, p->url.c_str(), width - 2);
-        attroff(A_DIM);
+        attroff(url_attr);
     }
 
     y++;
@@ -207,7 +260,9 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
     const text::Lines lines = text::renderHtml(p->scraped.empty() ? p->content : p->scraped,
                                                width - 2);
     if (lines.empty()) {
+        attron(A_DIM);
         mvaddnstr(y, x + 1, "(this post has no content)", width - 2);
+        attroff(A_DIM);
         return;
     }
 
@@ -242,9 +297,11 @@ void App::drawStatus(int h, int w) {
         else
             line = pane_ == Pane::Content ? kHelpContent : kHelpPosts;
     }
-    attron(A_DIM);
+    int attr = A_DIM;
+    if (!status_.empty() && color_) attr = status_error_ ? A_BOLD | pair(kPairErr) : pair(kPairOk);
+    attron(attr);
     mvaddnstr(h - 1, 0, line.c_str(), w - 1);
-    attroff(A_DIM);
+    attroff(attr);
 }
 
 void App::handleKey(int ch) {
@@ -440,6 +497,7 @@ void App::scrapeCurrentPost() {
         status_ = "Scraped " + std::to_string(html.size()) + " bytes.";
     } catch (const std::exception& e) {
         status_ = std::string("Scrape failed: ") + e.what();
+        status_error_ = true;
     }
 }
 
@@ -472,6 +530,7 @@ void App::refetch() {
         status_ = "Fetched " + std::to_string(fetched.posts.size()) + " posts.";
     } catch (const std::exception& e) {
         status_ = std::string("Fetch failed: ") + e.what();
+        status_error_ = true;
     }
 
     reloadFeeds();

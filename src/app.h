@@ -33,6 +33,8 @@ private:
     const Feed* current() const;
     const Post* currentPost() const;
     bool prompt(const char* label, std::string& out);
+    int pair(short slot) const;
+    int attrFor(unsigned style) const;
     bool confirm(const std::string& question);
 
     std::vector<Feed> feeds_;
@@ -46,5 +48,7 @@ private:
     size_t content_offset_ = 0;
     size_t content_max_offset_ = 0;
     bool running_ = true;
+    bool color_ = false;
+    bool status_error_ = false;
     std::string status_;
 };
