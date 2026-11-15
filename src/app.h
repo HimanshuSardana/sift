@@ -32,6 +32,7 @@ private:
     void findNext(int dir, bool inclusive);
     int contentWidth() const;
     text::Lines contentLines() const;
+    void openInBrowser();
     void openPosts();
     void reloadPosts();
     void refetch();

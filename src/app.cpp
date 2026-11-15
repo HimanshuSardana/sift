@@ -4,6 +4,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <fcntl.h>
+#include <unistd.h>
+
+#include <csignal>
 #include <cstdint>
 #include <ctime>
 #include <stdexcept>
@@ -30,13 +34,45 @@ constexpr int kCtlRight = KEY_MAX + 2;
 
 const char kHelpFeeds[] = " j/k move  a add  d delete  r refetch  / search  l open  q quit ";
 const char kHelpPosts[] = " j/k move  l content  h feeds  / search  n next  f focus  q quit ";
-const char kHelpContent[] = " j/k scroll  s scrape  / search  n next  f focus  h posts  q quit ";
+const char kHelpContent[] = " j/k scroll  s scrape  o open  / search  f focus  h posts  q quit ";
 
 std::string trim(const std::string& s) {
     auto ws = [](unsigned char c) { return std::isspace(c) != 0; };
     auto b = std::find_if_not(s.begin(), s.end(), ws);
     auto e = std::find_if_not(s.rbegin(), s.rend(), ws).base();
     return b < e ? std::string(b, e) : std::string();
+}
+
+// Launches the post URL in the user's browser without blocking the UI.
+// Tries the usual openers in turn; SIFT_OPENER overrides the preference.
+bool launchOpener(const std::string& url) {
+    static const bool reaping = [] {
+        std::signal(SIGCHLD, SIG_IGN);  // do not collect zombies
+        return true;
+    }();
+    (void)reaping;
+
+    const char* override = std::getenv("SIFT_OPENER");
+    std::vector<std::string> commands;
+    if (override && *override) commands.emplace_back(override);
+    commands.emplace_back("xdg-open");
+    commands.emplace_back("open");
+    commands.emplace_back("sensible-browser");
+
+    const pid_t pid = fork();
+    if (pid < 0) return false;
+    if (pid == 0) {
+        setsid();
+        const int devnull = ::open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+        }
+        for (const std::string& cmd : commands)
+            execlp(cmd.c_str(), cmd.c_str(), url.c_str(), static_cast<char*>(nullptr));
+        _exit(127);
+    }
+    return true;
 }
 
 std::string lowerCase(const std::string& s) {
@@ -425,6 +461,9 @@ void App::handleFocusKey(int ch) {
         case 's':
             scrapeCurrentPost();
             return;
+        case 'o':
+            openInBrowser();
+            return;
         case 'r':
             refetch();
             return;
@@ -605,6 +644,9 @@ void App::handlePostsKey(int ch) {
         case 's':
             if (pane_ == Pane::Content) scrapeCurrentPost();
             return;
+        case 'o':
+            if (pane_ == Pane::Content) openInBrowser();
+            return;
         case 'r':
             refetch();
             return;
@@ -740,6 +782,25 @@ void App::scrapeCurrentPost() {
         status_ = std::string("Scrape failed: ") + e.what();
         status_error_ = true;
     }
+}
+
+void App::openInBrowser() {
+    const Post* p = currentPost();
+    if (!p) {
+        status_ = "No post selected.";
+        return;
+    }
+    if (p->url.empty()) {
+        status_ = "This post has no URL to open.";
+        status_error_ = true;
+        return;
+    }
+    if (!launchOpener(p->url)) {
+        status_ = "Could not launch a browser.";
+        status_error_ = true;
+        return;
+    }
+    status_ = "Opened in browser: " + p->url;
 }
 
 void App::openPosts() {
