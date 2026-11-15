@@ -5,11 +5,14 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <ctime>
+
+#include "fetch.h"
 
 namespace {
 
-const char kHelpFeeds[] = " j/k move   a add feed   Enter open   q quit ";
-const char kHelpPosts[] = " h back   q quit ";
+const char kHelpFeeds[] = " j/k move   a add feed   r refetch   Enter open   q quit ";
+const char kHelpPosts[] = " h back   r refetch   q quit ";
 
 std::string trim(const std::string& s) {
     auto ws = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -97,7 +100,7 @@ void App::drawPosts(int h, int w) {
     mvaddnstr(0, 0, header.c_str(), w - 1);
     attroff(A_REVERSE);
 
-    mvaddnstr(2, 2, "No posts yet.", w - 3);
+    mvaddnstr(2, 2, (std::to_string(posts_.size()) + " posts stored.").c_str(), w - 3);
     drawStatus(h, w);
 }
 
@@ -148,19 +151,18 @@ void App::handleFeedsKey(int ch) {
             }
             long long id = db::addFeed(url, url);
             reloadFeeds();
-            for (size_t i = 0; i < feeds_.size(); ++i) {
-                if (feeds_[i].id == id) {
-                    select(i);
-                    break;
-                }
-            }
+            selectFeedById(id);
             status_ = "Added feed: " + url;
             return;
         }
+        case 'r':
+            refetch();
+            return;
         case '\n':
         case '\r':
         case KEY_ENTER:
             if (n) {
+                reloadPosts();
                 view_ = View::Posts;
                 offset_ = 0;
             }
@@ -174,7 +176,42 @@ void App::handlePostsKey(int ch) {
     if (ch == 27 || ch == 'h' || ch == KEY_LEFT) {
         view_ = View::Feeds;
         offset_ = 0;
+    } else if (ch == 'r') {
+        refetch();
     }
+}
+
+void App::reloadPosts() {
+    const Feed* f = current();
+    posts_ = f ? db::posts(f->id) : std::vector<Post>{};
+}
+
+void App::refetch() {
+    const Feed* f = current();
+    if (!f) {
+        status_ = "No feed selected.";
+        return;
+    }
+
+    const long long id = f->id;
+    const std::string url = f->url;
+
+    status_ = "Fetching " + url + " ...";
+    draw();
+
+    try {
+        FetchedFeed fetched = fetch::feed(url);
+        if (!fetched.title.empty()) db::setFeedTitle(id, fetched.title);
+        db::upsertPosts(id, fetched.posts);
+        db::markFetched(id, static_cast<long long>(std::time(nullptr)));
+        status_ = "Fetched " + std::to_string(fetched.posts.size()) + " posts.";
+    } catch (const std::exception& e) {
+        status_ = std::string("Fetch failed: ") + e.what();
+    }
+
+    reloadFeeds();
+    selectFeedById(id);
+    reloadPosts();
 }
 
 void App::reloadFeeds() {
@@ -192,8 +229,17 @@ void App::select(size_t index) {
     selected_ = std::min(index, feeds_.size() - 1);
 }
 
+void App::selectFeedById(long long id) {
+    for (size_t i = 0; i < feeds_.size(); ++i) {
+        if (feeds_[i].id == id) {
+            select(i);
+            return;
+        }
+    }
+}
+
 const Feed* App::current() const {
-    if (view_ == View::Feeds || feeds_.empty() || selected_ >= feeds_.size()) return nullptr;
+    if (feeds_.empty() || selected_ >= feeds_.size()) return nullptr;
     return &feeds_[selected_];
 }
 

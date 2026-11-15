@@ -1,14 +1,14 @@
 CXX      ?= g++
 CXXFLAGS ?= -std=c++20 -Wall -Wextra -O2
-PKGS     := ncursesw sqlite3
+PKGS     := ncursesw sqlite3 libcurl libxml-2.0
 CPPFLAGS += -Isrc $(shell pkg-config --cflags $(PKGS) 2>/dev/null)
-LDLIBS   += $(shell pkg-config --libs $(PKGS) 2>/dev/null || echo -lncursesw -lsqlite3)
+LDLIBS   += $(shell pkg-config --libs $(PKGS) 2>/dev/null || echo -lncursesw -lsqlite3 -lcurl -lxml2)
 
 TARGET   := sift
 SRC      := $(wildcard src/*.cpp)
 OBJ      := $(SRC:.cpp=.o)
 LIB_OBJ  := $(filter-out src/main.o,$(OBJ))
-TEST_BIN := tests/db_test
+TESTS    := tests/db_test tests/parse_test
 
 .PHONY: all run test clean
 
@@ -20,14 +20,14 @@ $(TARGET): $(OBJ)
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c -o $@ $<
 
-$(TEST_BIN): tests/db_test.cpp $(LIB_OBJ)
+tests/%: tests/%.cpp $(LIB_OBJ)
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
 
-test: $(TEST_BIN)
-	./$(TEST_BIN)
+test: $(TESTS)
+	@for t in $(TESTS); do echo "== $$t"; ./$$t || exit 1; done
 
 run: $(TARGET)
 	./$(TARGET)
 
 clean:
-	rm -f $(OBJ) $(TARGET) $(TEST_BIN)
+	rm -f $(OBJ) $(TARGET) $(TESTS)

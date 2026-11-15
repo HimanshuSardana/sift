@@ -25,10 +25,18 @@ struct Stmt {
     Stmt(const Stmt&) = delete;
     Stmt& operator=(const Stmt&) = delete;
 
+    void reset() {
+        sqlite3_reset(s);
+        sqlite3_clear_bindings(s);
+    }
     void text(int i, const std::string& v) {
         check(sqlite3_bind_text(s, i, v.c_str(), static_cast<int>(v.size()), SQLITE_TRANSIENT),
-              sqlite3_db_handle(s), "bind");
+              sqlite3_db_handle(s), "bind text");
     }
+    void integer(int i, long long v) {
+        check(sqlite3_bind_int64(s, i, v), sqlite3_db_handle(s), "bind int");
+    }
+    void null(int i) { check(sqlite3_bind_null(s, i), sqlite3_db_handle(s), "bind null"); }
     void step() { check(sqlite3_step(s), sqlite3_db_handle(s), "step"); }
     bool row() {
         int rc = sqlite3_step(s);
@@ -42,8 +50,17 @@ struct Stmt {
     }
 };
 
+void exec(const char* sql) {
+    char* err = nullptr;
+    if (sqlite3_exec(conn, sql, nullptr, nullptr, &err) != SQLITE_OK) {
+        std::string msg = err ? err : "unknown error";
+        sqlite3_free(err);
+        throw std::runtime_error(msg);
+    }
+}
+
 void migrate() {
-    const char* schema = R"(
+    exec(R"(
         CREATE TABLE IF NOT EXISTS feeds (
             id              INTEGER PRIMARY KEY,
             url             TEXT NOT NULL UNIQUE,
@@ -63,13 +80,12 @@ void migrate() {
             UNIQUE(feed_id, guid)
         );
         CREATE INDEX IF NOT EXISTS posts_by_feed ON posts(feed_id, published_at DESC);
-    )";
-    char* err = nullptr;
-    if (sqlite3_exec(conn, schema, nullptr, nullptr, &err) != SQLITE_OK) {
-        std::string msg = err ? err : "unknown error";
-        sqlite3_free(err);
-        throw std::runtime_error("migrate: " + msg);
-    }
+    )");
+}
+
+std::optional<long long> colOptInt(sqlite3_stmt* s, int i) {
+    if (sqlite3_column_type(s, i) == SQLITE_NULL) return std::nullopt;
+    return sqlite3_column_int64(s, i);
 }
 
 }  // namespace
@@ -124,9 +140,77 @@ std::vector<Feed> feeds() {
         f.id = sqlite3_column_int64(q.s, 0);
         f.url = q.colText(1);
         f.title = q.colText(2);
-        if (sqlite3_column_type(q.s, 3) != SQLITE_NULL)
-            f.last_fetched = sqlite3_column_int64(q.s, 3);
+        f.last_fetched = colOptInt(q.s, 3);
         out.push_back(std::move(f));
+    }
+    return out;
+}
+
+void setFeedTitle(long long feed_id, const std::string& title) {
+    Stmt q(conn, "UPDATE feeds SET title = ? WHERE id = ?");
+    q.text(1, title);
+    q.integer(2, feed_id);
+    q.step();
+}
+
+void markFetched(long long feed_id, long long unix_time) {
+    Stmt q(conn, "UPDATE feeds SET last_fetched_at = ? WHERE id = ?");
+    q.integer(1, unix_time);
+    q.integer(2, feed_id);
+    q.step();
+}
+
+void upsertPosts(long long feed_id, const std::vector<Post>& posts) {
+    if (posts.empty()) return;
+
+    exec("BEGIN");
+    try {
+        Stmt q(conn,
+               "INSERT INTO posts(feed_id, guid, title, url, author, published_at, content) "
+               "VALUES(?, ?, ?, ?, ?, ?, ?) "
+               "ON CONFLICT(feed_id, guid) DO UPDATE SET "
+               "title = excluded.title, url = excluded.url, author = excluded.author, "
+               "published_at = excluded.published_at, content = excluded.content");
+        for (const Post& p : posts) {
+            q.reset();
+            q.integer(1, feed_id);
+            q.text(2, p.guid);
+            q.text(3, p.title);
+            q.text(4, p.url);
+            q.text(5, p.author);
+            if (p.published_at) {
+                q.integer(6, *p.published_at);
+            } else {
+                q.null(6);
+            }
+            q.text(7, p.content);
+            q.step();
+        }
+    } catch (...) {
+        exec("ROLLBACK");
+        throw;
+    }
+    exec("COMMIT");
+}
+
+std::vector<Post> posts(long long feed_id) {
+    Stmt q(conn,
+           "SELECT id, guid, title, url, author, published_at, content, read_at FROM posts "
+           "WHERE feed_id = ? ORDER BY published_at DESC, id DESC");
+    q.integer(1, feed_id);
+    std::vector<Post> out;
+    while (q.row()) {
+        Post p;
+        p.id = sqlite3_column_int64(q.s, 0);
+        p.feed_id = feed_id;
+        p.guid = q.colText(1);
+        p.title = q.colText(2);
+        p.url = q.colText(3);
+        p.author = q.colText(4);
+        p.published_at = colOptInt(q.s, 5);
+        p.content = q.colText(6);
+        p.read = sqlite3_column_type(q.s, 7) != SQLITE_NULL;
+        out.push_back(std::move(p));
     }
     return out;
 }
