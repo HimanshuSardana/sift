@@ -99,6 +99,26 @@ void testWrapAndPre() {
     require(plain(br) == "a\nb", "br forces a break: " + plain(br));
 }
 
+void testPreIndent() {
+    const auto block = text::renderHtml(
+        "<pre>{\n  \"key1\": \"value1\",\n\t\"key2\": 2\n}</pre>", 40);
+    require(plain(block) == "{\n  \"key1\": \"value1\",\n    \"key2\": 2\n}",
+            "pre keeps indentation and expands tabs: " + plain(block));
+
+    const auto code = text::renderHtml("<pre><code>store := make(map[string]string)</code></pre>", 40);
+    require(plain(code) == "store := make(map[string]string)", "pre inside code: " + plain(code));
+    require(styleAt(code, 0, "store") == text::kDim, "pre stays dimmed");
+
+    const auto wide = text::renderHtml("<pre>0123456789abcdef</pre>", 8);
+    require(plain(wide) == "01234567\n89abcdef", "wide pre lines hard split: " + plain(wide));
+
+    const auto blank = text::renderHtml("<pre>a\n\nb</pre>", 20);
+    require(plain(blank) == "a\n\nb", "blank pre lines kept: " + plain(blank));
+
+    const auto inline_code = text::renderHtml("<p>use <code>a  b</code> here</p>", 40);
+    require(plain(inline_code) == "use a b here", "inline code still collapses spaces");
+}
+
 void testListWrapIndent() {
     const auto lines =
         text::renderHtml("<ul><li>alpha beta gamma delta epsilon</li></ul>", 16);
@@ -115,6 +135,7 @@ int main() {
     testLinks();
     testListsAndQuotes();
     testWrapAndPre();
+    testPreIndent();
     testListWrapIndent();
     std::puts("text tests passed");
     return 0;

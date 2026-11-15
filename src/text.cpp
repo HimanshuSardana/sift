@@ -27,8 +27,10 @@ struct Word {
 
 struct Block {
     int kind = kPara;
+    unsigned style = text::kPlain;
     std::string prefix;
     std::vector<Word> words;
+    std::string raw;  // preformatted blocks keep their spacing verbatim
 };
 
 struct State {
@@ -147,9 +149,13 @@ std::string decodeEntities(const std::string& s) {
     return out;
 }
 
-Block& openBlock(State& st, int kind, std::string prefix) {
+Block& openBlock(State& st, int kind, std::string prefix, unsigned style = text::kPlain) {
     if (!st.open) {
-        st.blocks.push_back(Block{kind, std::move(prefix), {}});
+        Block b;
+        b.kind = kind;
+        b.style = style;
+        b.prefix = std::move(prefix);
+        st.blocks.push_back(std::move(b));
         st.open = true;
     }
     return st.blocks.back();
@@ -162,6 +168,12 @@ void closeBlock(State& st) {
 
 void addText(State& st, const std::string& raw, unsigned style) {
     const std::string text = decodeEntities(raw);
+
+    if (st.preformatted) {  // keep spaces, tabs and newlines exactly as authored
+        openBlock(st, kPre, "", style).raw += text;
+        return;
+    }
+
     std::string word;
 
     auto flush = [&] {
@@ -245,8 +257,8 @@ void walk(xmlNode* n, unsigned style, State& st) {
         }
         if (name == "pre") {
             closeBlock(st);
-            openBlock(st, kPre, "");
             st.preformatted = true;
+            openBlock(st, kPre, "", style | text::kDim);
             walk(n->children, style | text::kDim, st);
             closeBlock(st);
             continue;
@@ -283,7 +295,47 @@ void appendSegment(text::Line& line, const std::string& s, unsigned style) {
     line.segments.push_back(text::Segment{s, style});
 }
 
+std::string expandTabs(const std::string& s) {
+    std::string out;
+    for (const char c : s) {
+        if (c == '\t') {
+            out += "    ";
+        } else if (c != '\r') {
+            out += c;
+        }
+    }
+    return out;
+}
+
+void layoutPre(const Block& block, int width, text::Lines& out) {
+    std::string raw = expandTabs(block.raw);
+    while (!raw.empty() && raw.front() == '\n') raw.erase(raw.begin());
+    while (!raw.empty() && (raw.back() == '\n' || raw.back() == ' ')) raw.pop_back();
+
+    size_t pos = 0;
+    while (true) {
+        const size_t nl = raw.find('\n', pos);
+        const std::string line =
+            raw.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
+
+        for (size_t i = 0; i < line.size() || i == 0; i += static_cast<size_t>(width)) {
+            text::Line shown;
+            appendSegment(shown, line.substr(i, static_cast<size_t>(width)), block.style);
+            out.push_back(std::move(shown));
+            if (line.empty()) break;
+        }
+
+        if (nl == std::string::npos) break;
+        pos = nl + 1;
+    }
+}
+
 void layout(const Block& block, int width, text::Lines& out) {
+    if (block.kind == kPre) {
+        layoutPre(block, width, out);
+        return;
+    }
+
     const std::string prefix = block.prefix;
     const std::string hang(prefix.size(), ' ');
     const int avail = width - static_cast<int>(prefix.size());
@@ -371,7 +423,7 @@ Lines renderHtml(const std::string& html, int width) {
 
     int previous_kind = -1;
     for (const Block& b : st.blocks) {
-        if (b.words.empty() && b.kind != kItem) continue;
+        if (b.words.empty() && b.raw.empty() && b.kind != kItem) continue;
         const bool tight = b.kind == kItem && previous_kind == kItem;
         if (!out.empty() && !tight) out.push_back(Line{});
         layout(b, width, out);
