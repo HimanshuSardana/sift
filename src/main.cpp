@@ -1,21 +1,20 @@
-#include <ncurses.h>
+#include <cstdio>
+#include <exception>
+
+#include "app.h"
+#include "db.h"
 
 int main() {
-    initscr();
-    cbreak();
-    noecho();
-    keypad(stdscr, TRUE);
-    curs_set(0);
-
-    int y = 0, x = 0;
-    getmaxyx(stdscr, y, x);
-
-    mvprintw(y / 2, (x - 22) / 2, "Press 'q' to quit.");
-    refresh();
-
-    while (getch() != 'q') {
+    try {
+        db::open(db::defaultPath());
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "sift: %s\n", e.what());
+        return 1;
     }
 
-    endwin();
+    App app;
+    app.run();
+
+    db::close();
     return 0;
 }
