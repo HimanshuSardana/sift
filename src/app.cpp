@@ -14,7 +14,7 @@
 
 namespace {
 
-const char kHelpFeeds[] = " j/k move   a add feed   r refetch   Enter open   q quit ";
+const char kHelpFeeds[] = " j/k move   a add   d delete   r refetch   Enter open   q quit ";
 const char kHelpPosts[] = " j/k move   l content   r refetch   Esc back   q quit ";
 const char kHelpContent[] = " j/k scroll   s scrape   h posts   r refetch   Esc back   q quit ";
 
@@ -291,6 +291,24 @@ void App::handleFeedsKey(int ch) {
             status_ = "Added feed: " + url;
             return;
         }
+        case 'd': {
+            const Feed* f = current();
+            if (!f) {
+                status_ = "No feed selected.";
+                return;
+            }
+            const long long id = f->id;
+            const std::string label = f->title.empty() ? f->url : f->title;
+            if (!confirm("Delete feed \"" + label + "\" and its posts?")) {
+                status_ = "Delete cancelled.";
+                return;
+            }
+            db::removeFeed(id);
+            reloadFeeds();
+            reloadPosts();
+            status_ = "Deleted feed: " + label;
+            return;
+        }
         case 's':
             if (pane_ == Pane::Content) scrapeCurrentPost();
             return;
@@ -367,6 +385,24 @@ void App::handlePostsKey(int ch) {
                 selectPost(posts_.size() - 1);
             }
             return;
+        case 'd': {
+            const Feed* f = current();
+            if (!f) {
+                status_ = "No feed selected.";
+                return;
+            }
+            const long long id = f->id;
+            const std::string label = f->title.empty() ? f->url : f->title;
+            if (!confirm("Delete feed \"" + label + "\" and its posts?")) {
+                status_ = "Delete cancelled.";
+                return;
+            }
+            db::removeFeed(id);
+            reloadFeeds();
+            reloadPosts();
+            status_ = "Deleted feed: " + label;
+            return;
+        }
         case 's':
             if (pane_ == Pane::Content) scrapeCurrentPost();
             return;
@@ -481,6 +517,21 @@ void App::selectPost(size_t index) {
     if (posts_.empty()) return;
     post_selected_ = std::min(index, posts_.size() - 1);
     content_offset_ = 0;
+}
+
+bool App::confirm(const std::string& question) {
+    int h = 0, w = 0;
+    getmaxyx(stdscr, h, w);
+
+    move(h - 1, 0);
+    clrtoeol();
+    attron(A_BOLD);
+    addnstr((question + " (y/N) ").c_str(), w - 1);
+    attroff(A_BOLD);
+    refresh();
+
+    const int ch = getch();
+    return ch == 'y' || ch == 'Y';
 }
 
 bool App::prompt(const char* label, std::string& out) {

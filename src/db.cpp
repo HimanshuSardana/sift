@@ -127,6 +127,7 @@ void open(const std::string& path) {
         std::filesystem::create_directories(parent);
     check(sqlite3_open(path.c_str(), &conn), conn, "open");
     sqlite3_busy_timeout(conn, 5000);
+    exec("PRAGMA foreign_keys = ON");  // feeds -> posts cascade
     migrate();
 }
 
@@ -159,6 +160,12 @@ std::vector<Feed> feeds() {
         out.push_back(std::move(f));
     }
     return out;
+}
+
+void removeFeed(long long feed_id) {
+    Stmt q(conn, "DELETE FROM feeds WHERE id = ?");
+    q.integer(1, feed_id);
+    q.step();
 }
 
 void setFeedTitle(long long feed_id, const std::string& title) {

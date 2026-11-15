@@ -38,6 +38,9 @@ long long addFeed(const std::string& url, const std::string& title);
 
 std::vector<Feed> feeds();
 
+// Removes the feed and its cached posts.
+void removeFeed(long long feed_id);
+
 void setFeedTitle(long long feed_id, const std::string& title);
 void markFetched(long long feed_id, long long unix_time);
 

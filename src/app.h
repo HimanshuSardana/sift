@@ -33,6 +33,7 @@ private:
     const Feed* current() const;
     const Post* currentPost() const;
     bool prompt(const char* label, std::string& out);
+    bool confirm(const std::string& question);
 
     std::vector<Feed> feeds_;
     std::vector<Post> posts_;
