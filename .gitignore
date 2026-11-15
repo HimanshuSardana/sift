@@ -1,2 +1,6 @@
 *.o
 sift
+tests/db_test
+*.db
+*.db-wal
+*.db-shm
