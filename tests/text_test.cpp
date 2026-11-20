@@ -34,6 +34,14 @@ int widest(const text::Lines& lines) {
     return max;
 }
 
+void testUtf8Passthrough() {
+    // Fragments arrive as UTF-8; the parser must not re-encode them as Latin-1.
+    const std::string html = "<p>Rust\xe2\x80\x99s \xe2\x80\x94 fast</p>";
+    const std::string text = plain(text::renderHtml(html, 60));
+    require(text == "Rust\xe2\x80\x99s \xe2\x80\x94 fast",
+            "utf8 kept intact: " + text);
+}
+
 void testStructure() {
     const auto lines = text::renderHtml(
         "<h2>Title</h2><p>First <b>bold</b> word.</p><p>Second paragraph.</p>", 40);
@@ -133,13 +141,13 @@ void testLinkList() {
 }
 
 void testImageUrls() {
-  const auto imgs = text::imageUrls(
+  const auto imgs = text::images(
       "<p><img src=\"https://a.test/1.png\"></p><p><img src=\"/rel.png\"></p>"
       "<p><img src=\"https://a.test/1.png\"></p>");
   require(imgs.size() == 2, "unique image sources");
-  require(imgs[0] == "https://a.test/1.png", "absolute kept");
-  require(imgs[1] == "/rel.png", "relative kept for the caller to resolve");
-  require(text::imageUrls("<p>no images</p>").empty(), "no images");
+  require(imgs[0].src == "https://a.test/1.png", "absolute kept");
+  require(imgs[1].src == "/rel.png", "relative kept for the caller to resolve");
+  require(imgs.empty() == false && text::images("<p>no images</p>").empty(), "no images");
 }
 
 void testListWrapIndent() {
@@ -155,6 +163,7 @@ void testListWrapIndent() {
 int main() {
     testStructure();
     testEntitiesAndJunk();
+    testUtf8Passthrough();
     testLinks();
     testLinkList();
     testImageUrls();

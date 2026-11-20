@@ -58,15 +58,13 @@ void testGarbage() {
   int w = 0, h = 0;
   require(!image::probeSize("not an image at all", w, h), "garbage rejected");
   require(!image::probeSize("", w, h), "empty rejected");
-  require(image::firstImageUrl("<p>none</p>", "https://x.test/a").empty(), "no image url");
-  require(image::firstImageUrl("<img src=\"https://y.test/i.png\">", "") ==
-              "https://y.test/i.png",
-          "absolute image url");
-  require(image::firstImageUrl("<img src=\"//y.test/i.png\">", "") == "https://y.test/i.png",
+  require(image::resolveUrl("https://y.test/i.png", "").empty() == false, "absolute kept");
+  require(image::resolveUrl("//y.test/i.png", "") == "https://y.test/i.png",
           "protocol-relative resolved");
-  require(image::firstImageUrl("<img src=\"/i.png\">", "https://x.test/post") ==
-              "https://x.test/i.png",
+  require(image::resolveUrl("/i.png", "https://x.test/post") == "https://x.test/i.png",
           "root-relative resolved against the post host");
+  require(image::resolveUrl("relative.png", "https://x.test/post").empty(),
+          "bare relative paths are skipped");
 }
 
 }  // namespace

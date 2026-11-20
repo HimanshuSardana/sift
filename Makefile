@@ -6,12 +6,15 @@ CPPFLAGS += -Isrc $(shell pkg-config --cflags $(PKGS) 2>/dev/null)
 LDLIBS   += $(shell pkg-config --libs $(PKGS) 2>/dev/null || echo -lncursesw -lsqlite3 -lcurl -lxml2)
 
 TARGET   := sift
+PREFIX   ?= $(HOME)/.local
+BINDIR   ?= $(PREFIX)/bin
+INSTALL  ?= install
 SRC      := $(wildcard src/*.cpp)
 OBJ      := $(SRC:.cpp=.o)
 LIB_OBJ  := $(filter-out src/main.o,$(OBJ))
 TESTS    := tests/db_test tests/parse_test tests/text_test tests/scrape_test tests/image_test
 
-.PHONY: all run test clean
+.PHONY: all run test clean install uninstall
 
 all: $(TARGET)
 
@@ -35,3 +38,10 @@ run: $(TARGET)
 
 clean:
 	rm -f $(OBJ) $(TARGET) $(TESTS)
+
+install: $(TARGET)
+	mkdir -p $(DESTDIR)$(BINDIR)
+	$(INSTALL) -m 0755 $(TARGET) $(DESTDIR)$(BINDIR)/$(TARGET)
+
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)

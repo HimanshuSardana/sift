@@ -40,7 +40,7 @@ const char kHelpFeeds[] =
 const char kHelpPosts[] =
     " j/k move  l content  h feeds  f links  C-f focus  / search  q quit ";
 const char kHelpContent[] =
-    " j/k  s scrape  o open  i image  f links  C-f focus  q quit ";
+    " j/k  s scrape  o open  i images  f links  C-f focus  q quit ";
 
 std::string trim(const std::string &s) {
   auto ws = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -187,6 +187,28 @@ int App::attrFor(unsigned style) const {
   return attr;
 }
 
+void App::openUrl(const std::string &url) {
+  single_ = true;
+  single_url_ = url;
+  focus_ = true;
+  run();
+}
+
+bool App::refreshSingle() {
+  status_ = "Fetching " + single_url_ + " ...";
+  status_error_ = false;
+  try {
+    single_html_ = scrape::article(single_url_);
+    content_offset_ = 0;
+    status_.clear();
+    return true;
+  } catch (const std::exception &e) {
+    status_ = std::string("Fetch failed: ") + e.what();
+    status_error_ = true;
+    return false;
+  }
+}
+
 void App::run() {
   initscr();
   cbreak();
@@ -212,7 +234,13 @@ void App::run() {
   define_key("\033[5D", kCtlLeft);
   define_key("\033[5C", kCtlRight);
 
-  reloadFeeds();
+  // The single-page reader never touches the sqlite store.
+  if (single_) {
+    draw();
+    refreshSingle();
+  } else {
+    reloadFeeds();
+  }
 
   while (running_) {
     draw();
@@ -222,12 +250,15 @@ void App::run() {
     handleKey(ch);
   }
 
+  // kitty keeps a graphic until it is deleted, so a placed image would linger
+  // over the shell after we exit.
+  image::clear();
   endwin();
 }
 
 void App::draw() {
   erase();
-  pending_image_ = false;
+  placements_.clear();
   int h = 0, w = 0;
   getmaxyx(stdscr, h, w);
 
@@ -243,6 +274,8 @@ void App::draw() {
 
   if (palette_) {
     drawPalette(h, w);
+  } else if (image_palette_) {
+    drawImagePalette(h, w);
   } else {
     curs_set(0);
   }
@@ -251,15 +284,13 @@ void App::draw() {
   // Inline images go out after the text, otherwise ncurses paints over them.
   // Only touch the terminal when the placement actually changed.
   std::string sig;
-  if (pending_image_)
-    sig = image_path_ + ":" + std::to_string(pending_rect_[0]) + "," +
-          std::to_string(pending_rect_[1]) + "," + std::to_string(pending_rect_[2]) + "," +
-          std::to_string(pending_rect_[3]);
+  for (const Placement &p : placements_)
+    sig += p.path + ":" + std::to_string(p.x) + "," + std::to_string(p.y) + "," +
+           std::to_string(p.cols) + "," + std::to_string(p.rows) + ";";
   if (sig != placed_sig_) {
     image::clear();
-    if (pending_image_)
-      image::place(image_path_, pending_rect_[0], pending_rect_[1], pending_rect_[2],
-                   pending_rect_[3]);
+    for (const Placement &p : placements_)
+      image::place(p.path, p.x, p.y, p.cols, p.rows);
     placed_sig_ = sig;
   }
 }
@@ -384,24 +415,46 @@ void App::drawPosts(int h, int w) {
 
 // Reserves rows for the inline image and remembers where to place it. Returns
 // the first row left for text.
-int App::drawImageBlock(int x, int y, int width, int bottom) {
-  if (!images_ || image_path_.empty() || image_w_ <= 0 || image_h_ <= 0)
-    return y;
+// Paints the rendered article from content_offset_. Pictures show up as a
+// placeholder line; 'i' opens the gallery that renders them.
+void App::drawContent(int top, int x, int width, int bottom) {
+  const text::Lines lines = contentLines();
+  if (lines.empty()) {
+    const char *msg = "(this post has no content)";
+    if (single_)
+      msg = single_html_.empty() ? "(fetching ...)" : "(this page has no readable content)";
+    attron(A_DIM);
+    mvaddnstr(top, x, msg, width);
+    attroff(A_DIM);
+    return;
+  }
 
-  const int cols = std::min(width, 64);
-  if (cols < 8 || bottom - y < 3)
-    return y;
+  const int avail = bottom - top;
+  if (avail <= 0)
+    return;
 
-  const double aspect = static_cast<double>(image_h_) / static_cast<double>(image_w_);
-  int rows = static_cast<int>(cols * aspect / 2.0 + 0.5);  // cells are ~2:1
-  rows = std::max(3, std::min(rows, bottom - y - 1));
+  content_max_offset_ = lines.size() > static_cast<size_t>(avail)
+                            ? lines.size() - static_cast<size_t>(avail)
+                            : 0;
+  content_offset_ = std::min(content_offset_, content_max_offset_);
 
-  pending_image_ = true;
-  pending_rect_[0] = x;
-  pending_rect_[1] = y;
-  pending_rect_[2] = cols;
-  pending_rect_[3] = rows;
-  return y + rows + 1;
+  int y = top;
+  for (size_t i = content_offset_; i < lines.size() && y < bottom; ++i) {
+    const text::Line &line = lines[i];
+
+    if (!line.image.empty()) {
+      std::string label = "[image";
+      if (!line.image_alt.empty())
+        label += ": " + line.image_alt;
+      label += " - press i]";
+      attron(A_DIM);
+      mvaddnstr(y++, x, label.c_str(), width);
+      attroff(A_DIM);
+      continue;
+    }
+
+    drawLine(y++, x, x + width, line);
+  }
 }
 
 void App::drawPostBody(int top, int x, int width, int bottom) {
@@ -431,33 +484,7 @@ void App::drawPostBody(int top, int x, int width, int bottom) {
     attroff(url_attr);
   }
 
-  y = drawImageBlock(x, y + 1, width, bottom);
-
-  const int avail = bottom - y;
-  if (avail <= 0)
-    return;
-
-  const text::Lines lines =
-      text::renderHtml(p->scraped.empty() ? p->content : p->scraped, width);
-  if (lines.empty()) {
-    attron(A_DIM);
-    mvaddnstr(y, x, "(this post has no content)", width);
-    attroff(A_DIM);
-    return;
-  }
-
-  content_max_offset_ = lines.size() > static_cast<size_t>(avail)
-                            ? lines.size() - static_cast<size_t>(avail)
-                            : 0;
-  content_offset_ = std::min(content_offset_, content_max_offset_);
-
-  const int right = x + width;
-  for (int r = 0; r < avail; ++r) {
-    const size_t i = content_offset_ + static_cast<size_t>(r);
-    if (i >= lines.size())
-      break;
-    drawLine(y + r, x, right, lines[i]);
-  }
+  drawContent(y + 1, x, width, bottom);
 }
 
 void App::drawLine(int y, int x, int right, const text::Line &line) {
@@ -479,37 +506,30 @@ void App::drawLine(int y, int x, int right, const text::Line &line) {
 void App::drawFocus(int h, int w) {
   const int width = std::max(10, std::min(w - 2, 80));
   const int x = std::max(1, (w - width) / 2);
-  int top = drawImageBlock(x, 0, width, status_.empty() ? h : h - 1);
-  const int rows = (status_.empty() ? h : h - 1) - top;
+  const int bottom = (single_ || !status_.empty()) ? h - 1 : h;
 
-  const text::Lines lines = contentLines();
-  if (lines.empty()) {
+  int top = 0;
+  if (single_) {
     attron(A_DIM);
-    mvaddnstr(0, x, "(this post has no content)", width);
+    mvaddnstr(0, x, single_url_.c_str(), width);
     attroff(A_DIM);
-    return;
+    top = 2;
   }
 
-  content_max_offset_ = lines.size() > static_cast<size_t>(rows)
-                            ? lines.size() - static_cast<size_t>(rows)
-                            : 0;
-  content_offset_ = std::min(content_offset_, content_max_offset_);
+  drawContent(top, x, width, bottom);
 
-  for (int r = 0; r < rows; ++r) {
-    const size_t i = content_offset_ + static_cast<size_t>(r);
-    if (i >= lines.size())
-      break;
-    drawLine(top + r, x, x + width, lines[i]);
+  std::string line = status_;
+  int attr =
+      color_ ? (status_error_ ? A_BOLD | pair(kPairErr) : pair(kPairOk)) : A_DIM;
+  if (line.empty()) {
+    if (!single_)
+      return;
+    line = " j/k scroll  / search  f links  i images  o open  r reload  q quit ";
+    attr = A_DIM;
   }
-
-  if (!status_.empty()) {
-    const int attr =
-        color_ ? (status_error_ ? A_BOLD | pair(kPairErr) : pair(kPairOk))
-               : A_DIM;
-    attron(attr);
-    mvaddnstr(h - 1, x, status_.c_str(), width);
-    attroff(attr);
-  }
+  attron(attr);
+  mvaddnstr(h - 1, x, line.c_str(), width);
+  attroff(attr);
 }
 
 void App::handleFocusKey(int ch) {
@@ -518,6 +538,10 @@ void App::handleFocusKey(int ch) {
   case 'h':
   case KEY_LEFT:
   case 27:
+    if (single_) {
+      running_ = false;
+      return;
+    }
     focus_ = false;
     pane_ = Pane::Content;
     return;
@@ -549,75 +573,245 @@ void App::handleFocusKey(int ch) {
     findNext(-1, false);
     return;
   case 's':
-    scrapeCurrentPost();
+    if (single_)
+      refreshSingle();
+    else
+      scrapeCurrentPost();
     return;
   case 'o':
     openInBrowser();
     return;
   case 'i':
-    toggleImages();
+    openImagePalette();
     return;
   case 'f':
     openLinkPalette();
     return;
   case 'r':
-    refetch();
+    if (single_)
+      refreshSingle();
+    else
+      refetch();
     return;
   default:
     return;
   }
 }
 
-void App::toggleImages() {
-  if (!image::supported()) {
-    status_ = "This terminal cannot show inline images.";
-    status_error_ = true;
+std::vector<size_t> App::imageMatches() const {
+  const std::string needle = lowerCase(image_query_);
+  std::vector<size_t> out;
+  for (size_t i = 0; i < image_list_.size(); ++i) {
+    const text::Image &img = image_list_[i];
+    if (needle.empty() || contains(lowerCase(img.alt), needle) ||
+        contains(lowerCase(img.src), needle))
+      out.push_back(i);
+  }
+  return out;
+}
+
+// Fetches (or reads from the disk cache) the picture under the cursor so the
+// right-hand pane can preview it.
+void App::loadPreview() {
+  preview_path_.clear();
+  preview_w_ = preview_h_ = 0;
+  preview_failed_ = false;
+
+  const std::vector<size_t> matches = imageMatches();
+  if (image_selected_ >= matches.size())
+    return;
+
+  const text::Image &img = image_list_[matches[image_selected_]];
+
+  const std::string url = image::resolveUrl(img.src, currentUrl());
+  if (url.empty() || !image::supported()) {
+    preview_failed_ = true;
     return;
   }
 
-  if (images_) {
-    images_ = false;
-    image_path_.clear();
-    status_ = "Images off.";
-    return;
-  }
-
-  const Post *p = currentPost();
-  if (!p) {
-    status_ = "No post selected.";
-    return;
-  }
-
-  const std::string url =
-      image::firstImageUrl(p->scraped.empty() ? p->content : p->scraped, p->url);
-  if (url.empty()) {
-    status_ = "This post has no image.";
-    return;
-  }
-
-  status_ = "Fetching image ...";
-  draw();
   try {
-    image_path_ = image::cacheFile(url, image_w_, image_h_);
-    images_ = true;
-    status_ = "Image: " + url;
-  } catch (const std::exception &e) {
-    image_path_.clear();
-    status_ = std::string("Image failed: ") + e.what();
-    status_error_ = true;
+    preview_path_ = image::cacheFile(url, preview_w_, preview_h_);
+    if (preview_w_ <= 0 || preview_h_ <= 0)
+      preview_failed_ = true;
+  } catch (const std::exception &) {
+    preview_failed_ = true;
   }
 }
 
-void App::openLinkPalette() {
-  const Post *p = currentPost();
-  if (!p) {
-    status_ = "No post selected.";
+void App::openImagePalette() {
+  image_list_ = text::images(currentHtml());
+  if (image_list_.empty()) {
+    status_ = single_ ? "This page has no images." : "This post has no images.";
     return;
   }
 
-  palette_links_ = text::links(p->scraped.empty() ? p->content : p->scraped);
+  image_query_.clear();
+  image_selected_ = 0;
+  image_palette_ = true;
+  loadPreview();
+}
+
+void App::handleImagePaletteKey(int ch) {
+  switch (ch) {
+  case 27:
+    image_palette_ = false;
+    placements_.clear();
+    return;
+  case '\n':
+  case '\r':
+  case KEY_ENTER: {
+    const std::vector<size_t> matches = imageMatches();
+    if (matches.empty() || image_selected_ >= matches.size())
+      return;
+    const std::string url =
+        image::resolveUrl(image_list_[matches[image_selected_]].src,
+                          currentUrl());
+    if (url.empty()) {
+      return;
+    }
+    launchOpener(url);
+    status_ = "Opened in browser: " + url;
+    image_palette_ = false;
+    return;
+  }
+  case ctrlKey('N'):
+  case KEY_DOWN: {
+    const std::vector<size_t> matches = imageMatches();
+    if (image_selected_ + 1 < matches.size()) {
+      ++image_selected_;
+      loadPreview();
+    }
+    return;
+  }
+  case ctrlKey('P'):
+  case KEY_UP:
+    if (image_selected_ > 0) {
+      --image_selected_;
+      loadPreview();
+    }
+    return;
+  case KEY_BACKSPACE:
+  case 127:
+  case 8:
+    if (!image_query_.empty())
+      image_query_.pop_back();
+    image_selected_ = 0;
+    loadPreview();
+    return;
+  case ctrlKey('U'):
+    image_query_.clear();
+    image_selected_ = 0;
+    loadPreview();
+    return;
+  default:
+    if (ch >= 32 && ch < 127) {
+      image_query_ += static_cast<char>(ch);
+      image_selected_ = 0;
+      loadPreview();
+    }
+    return;
+  }
+}
+
+// Two columns: the picture list on the left, a live preview on the right.
+void App::drawImagePalette(int h, int w) {
+  const std::vector<size_t> matches = imageMatches();
+  if (matches.empty())
+    image_selected_ = 0;
+  else if (image_selected_ >= matches.size())
+    image_selected_ = matches.size() - 1;
+
+  int width = std::min(w - 4, 92);
+  if (width < 30)
+    width = std::max(12, w - 2);
+  int height = std::min(h - 4, 22);
+  if (height < 10)
+    height = std::max(8, h - 2);
+
+  const Panel box{std::max(0, (h - height) / 2), std::max(0, (w - width) / 2), height, width};
+  drawPanel(box, "images (" + std::to_string(matches.size()) + "/" +
+                     std::to_string(image_list_.size()) + ")",
+            true, color_);
+
+  const int rows = box.innerRows();
+  const int inner_x = box.innerLeft();
+  const int inner_w = box.innerWidth();
+  if (rows < 6 || inner_w < 24)
+    return;
+
+  for (int r = 0; r < rows; ++r)
+    mvhline(box.innerTop() + r, inner_x, ' ', inner_w);
+
+  attron(A_BOLD);
+  mvaddnstr(box.innerTop(), inner_x, ("> " + image_query_).c_str(), inner_w);
+  attroff(A_BOLD);
+
+  const int list_w = std::max(16, inner_w * 34 / 100);
+  const int list_x = inner_x;
+  const int list_top = box.innerTop() + 2;
+  const int list_rows = rows - 3;
+  const int preview_x = inner_x + list_w + 1;
+  const int preview_w = inner_w - list_w - 1;
+
+  attron(A_DIM);
+  for (int y = box.innerTop() + 1; y < box.innerTop() + rows - 1; ++y)
+    mvaddch(y, inner_x + list_w, ACS_VLINE);
+  attroff(A_DIM);
+
+  size_t offset = 0;
+  if (image_selected_ >= static_cast<size_t>(list_rows))
+    offset = image_selected_ - static_cast<size_t>(list_rows) + 1;
+
+  for (int r = 0; r < list_rows; ++r) {
+    const size_t i = offset + static_cast<size_t>(r);
+    if (i >= matches.size())
+      break;
+
+    const text::Image &img = image_list_[matches[i]];
+    const std::string name = img.alt.empty() ? img.src : img.alt;
+    const int y = list_top + r;
+
+    if (i == image_selected_) {
+      attron(A_REVERSE);
+      mvhline(y, list_x, ' ', list_w);
+      mvaddnstr(y, list_x, (" " + name).c_str(), list_w);
+      attroff(A_REVERSE);
+    } else {
+      mvaddnstr(y, list_x, " ", 1);
+      attron(pair(kPairTitle));
+      mvaddnstr(y, list_x + 1, name.c_str(), list_w - 1);
+      attroff(pair(kPairTitle));
+    }
+  }
+
+  // Preview: reserve the right column and place the picture after the refresh.
+  const int preview_top = list_top;
+  const int preview_rows_avail = rows - 3;
+  if (preview_rows_avail > 2 && preview_w > 4 && !preview_path_.empty() && preview_w_ > 0) {
+    const double aspect = static_cast<double>(preview_h_) / preview_w_;
+    int img_rows = static_cast<int>(preview_w * aspect / 2.0 + 0.5);
+    img_rows = std::max(3, std::min(img_rows, preview_rows_avail));
+
+    placements_.push_back(Placement{preview_path_, preview_x, preview_top,
+                                    std::min(preview_w, 80), img_rows});
+  } else {
+    const std::string note = preview_failed_ ? "(no preview)"
+                                             : "(loading)";
+    attron(A_DIM);
+    mvaddnstr(preview_top, preview_x, note.c_str(), preview_w);
+    attroff(A_DIM);
+  }
+
+  attron(A_DIM);
+  mvaddnstr(box.innerTop() + rows - 1, inner_x,
+            "^N/^P move  Enter open  Esc close", inner_w);
+  attroff(A_DIM);
+}
+
+void App::openLinkPalette() {
+  palette_links_ = text::links(currentHtml());
   if (palette_links_.empty()) {
-    status_ = "This post has no links.";
+    status_ = single_ ? "This page has no links." : "This post has no links.";
     return;
   }
 
@@ -802,6 +996,10 @@ void App::handleKey(int ch) {
     handlePaletteKey(ch);
     return;
   }
+  if (image_palette_) {
+    handleImagePaletteKey(ch);
+    return;
+  }
   if (ch == 'q') {
     running_ = false;
     return;
@@ -976,7 +1174,7 @@ void App::handlePostsKey(int ch) {
     return;
   case 'i':
     if (pane_ == Pane::Content)
-      toggleImages();
+      openImagePalette();
     return;
   case 'r':
     refetch();
@@ -1082,11 +1280,23 @@ int App::contentWidth() const {
 }
 
 text::Lines App::contentLines() const {
+  return text::renderHtml(currentHtml(), contentWidth());
+}
+
+std::string App::currentHtml() const {
+  if (single_)
+    return single_html_;
   const Post *p = currentPost();
   if (!p)
     return {};
-  return text::renderHtml(p->scraped.empty() ? p->content : p->scraped,
-                          contentWidth());
+  return p->scraped.empty() ? p->content : p->scraped;
+}
+
+std::string App::currentUrl() const {
+  if (single_)
+    return single_url_;
+  const Post *p = currentPost();
+  return p ? p->url : std::string();
 }
 
 int App::leftWidth(int w) const {
@@ -1121,7 +1331,7 @@ void App::scrapeCurrentPost() {
       if (post.id == id)
         post.scraped = html;
     content_offset_ = 0;
-    status_ = "Scraped " + std::to_string(html.size()) + " bytes.";
+      status_ = "Scraped " + std::to_string(html.size()) + " bytes.";
   } catch (const std::exception &e) {
     status_ = std::string("Scrape failed: ") + e.what();
     status_error_ = true;
@@ -1129,22 +1339,18 @@ void App::scrapeCurrentPost() {
 }
 
 void App::openInBrowser() {
-  const Post *p = currentPost();
-  if (!p) {
-    status_ = "No post selected.";
-    return;
-  }
-  if (p->url.empty()) {
-    status_ = "This post has no URL to open.";
+  const std::string url = currentUrl();
+  if (url.empty()) {
+    status_ = single_ ? "Nothing to open." : "No post selected.";
     status_error_ = true;
     return;
   }
-  if (!launchOpener(p->url)) {
+  if (!launchOpener(url)) {
     status_ = "Could not launch a browser.";
     status_error_ = true;
     return;
   }
-  status_ = "Opened in browser: " + p->url;
+  status_ = "Opened in browser: " + url;
 }
 
 void App::openPosts() {

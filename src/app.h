@@ -7,14 +7,20 @@
 #include "db.h"
 #include "text.h"
 
+
 enum class View { Feeds, Posts };
 enum class Pane { Posts, Content };
 
 class App {
 public:
     void run();
+    // Reads a single page in focus mode instead of the feed dashboard.
+    void openUrl(const std::string& url);
 
 private:
+    bool refreshSingle();
+    std::string currentHtml() const;
+    std::string currentUrl() const;
     void draw();
     void drawFeeds(int h, int w);
     void drawPosts(int h, int w);
@@ -34,8 +40,12 @@ private:
     void findNext(int dir, bool inclusive);
     int contentWidth() const;
     text::Lines contentLines() const;
-    void toggleImages();
-    int drawImageBlock(int x, int y, int width, int bottom);
+    void drawContent(int top, int x, int width, int bottom);
+    void openImagePalette();
+    void drawImagePalette(int h, int w);
+    void handleImagePaletteKey(int ch);
+    std::vector<size_t> imageMatches() const;
+    void loadPreview();
     void openLinkPalette();
     void openSelectedLink();
     std::vector<size_t> paletteMatches() const;
@@ -65,14 +75,28 @@ private:
     size_t post_offset_ = 0;
     size_t content_offset_ = 0;
     size_t content_max_offset_ = 0;
+    bool single_ = false;
+    std::string single_url_;
+    std::string single_html_;
     bool focus_ = false;
-    bool images_ = false;
-    std::string image_path_;
-    int image_w_ = 0;
-    int image_h_ = 0;
+    struct Placement {
+        std::string path;
+        int x = 0;
+        int y = 0;
+        int cols = 0;
+        int rows = 0;
+    };
+    std::vector<Placement> placements_;
+
+    bool image_palette_ = false;
+    std::string image_query_;
+    size_t image_selected_ = 0;
+    std::vector<text::Image> image_list_;
+    std::string preview_path_;
+    int preview_w_ = 0;
+    int preview_h_ = 0;
+    bool preview_failed_ = false;
     std::string placed_sig_;
-    bool pending_image_ = false;
-    int pending_rect_[4] = {0, 0, 0, 0};
     bool palette_ = false;
     std::string palette_query_;
     size_t palette_selected_ = 0;

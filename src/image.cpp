@@ -121,19 +121,17 @@ bool supported() {
     return term && std::strstr(term, "kitty") != nullptr;
 }
 
-std::string firstImageUrl(const std::string& html, const std::string& base_url) {
-    const std::vector<std::string> urls = text::imageUrls(html);
-
-    for (const std::string& raw : urls) {
-        if (raw.rfind("http://", 0) == 0 || raw.rfind("https://", 0) == 0) return raw;
-        if (raw.rfind("//", 0) == 0) return "https:" + raw;
-        if (raw.rfind("/", 0) == 0 && base_url.find("://") != std::string::npos) {
-            const size_t scheme_end = base_url.find("://") + 3;
-            const size_t host_end = base_url.find('/', scheme_end);
-            return base_url.substr(0, host_end == std::string::npos ? base_url.size() : host_end) + raw;
-        }
-    }
-    return {};
+std::string resolveUrl(const std::string& src, const std::string& base_url) {
+  if (src.rfind("http://", 0) == 0 || src.rfind("https://", 0) == 0)
+    return src;
+  if (src.rfind("//", 0) == 0)
+    return "https:" + src;
+  if (src.rfind("/", 0) == 0 && base_url.find("://") != std::string::npos) {
+    const size_t scheme_end = base_url.find("://") + 3;
+    const size_t host_end = base_url.find('/', scheme_end);
+    return base_url.substr(0, host_end == std::string::npos ? base_url.size() : host_end) + src;
+  }
+  return {};
 }
 
 bool probeSize(const std::string& bytes, int& width, int& height) {
@@ -216,10 +214,14 @@ void place(const std::string& path, int x, int y, int cols, int rows) {
     if (!readFile(path, data) || cols < 1 || rows < 1) return;
 
     const std::string b64 = base64(data);
-    std::string seq = "\x1b[" + std::to_string(y + 1) + ";" + std::to_string(x + 1) + "H";
+    const std::string params = "a=T,f=100,i=" + std::to_string(kImageId) + ",c=" +
+                               std::to_string(cols) + ",r=" + std::to_string(rows) +
+                               ",C=1,z=0,q=2";
 
-    std::string params = "a=T,f=100,i=" + std::to_string(kImageId) + ",c=" + std::to_string(cols) +
-                         ",r=" + std::to_string(rows) + ",C=1,z=-1,q=2";
+    // Cursor move and payload travel in one passthrough wrapper: tmux forwards
+    // the enclosed sequence verbatim, so the outer terminal sees the move
+    // immediately before the placement.
+    std::string seq = "\x1b[" + std::to_string(y + 1) + ";" + std::to_string(x + 1) + "H";
 
     size_t offset = 0;
     bool first = true;
@@ -227,13 +229,17 @@ void place(const std::string& path, int x, int y, int cols, int rows) {
         const size_t n = std::min(kChunk, b64.size() - offset);
         const bool more = offset + n < b64.size();
 
-        std::string chunk = "\x1b_G";
-        if (first) chunk += params;
-        chunk += more ? ",m=1;" : ",m=0;";
-        chunk += b64.substr(offset, n);
-        chunk += "\x1b\\";
+        seq += "\x1b_G";
+        if (first) {
+            seq += params;
+            seq += more ? ",m=1;" : ",m=0;";
+        } else {
+            // Continuation chunks carry only m=; a leading comma is invalid.
+            seq += more ? "m=1;" : "m=0;";
+        }
+        seq += b64.substr(offset, n);
+        seq += "\x1b\\";
 
-        seq += chunk;
         offset += n;
         first = false;
     }
@@ -241,6 +247,8 @@ void place(const std::string& path, int x, int y, int cols, int rows) {
     emit(throughTmux(seq));
 }
 
-void clear() { emit(throughTmux("\x1b_Ga=d,d=i,i=" + std::to_string(kImageId) + ",q=2\x1b\\")); }
+void clear() {
+    emit(throughTmux("\x1b_Ga=d,d=i,i=" + std::to_string(kImageId) + ",q=2\x1b\\"));
+}
 
 }  // namespace image

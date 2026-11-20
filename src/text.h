@@ -19,6 +19,8 @@ struct Segment {
 
 struct Line {
     std::vector<Segment> segments;
+    std::string image;      // <img src> for a picture line, else empty
+    std::string image_alt;  // alt text, used when the image cannot be drawn
 };
 
 using Lines = std::vector<Line>;
@@ -31,8 +33,13 @@ struct Link {
 // External links in document order, de-duplicated by href.
 std::vector<Link> links(const std::string& html);
 
-// <img src> values in document order, de-duplicated.
-std::vector<std::string> imageUrls(const std::string& html);
+struct Image {
+    std::string src;
+    std::string alt;
+};
+
+// <img> elements in document order, de-duplicated by src.
+std::vector<Image> images(const std::string& html);
 
 // Renders an HTML fragment into styled lines wrapped to width columns:
 // headings and <strong> bold, links underlined with their href appended,

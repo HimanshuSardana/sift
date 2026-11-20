@@ -3,6 +3,7 @@
 #include <libxml/HTMLparser.h>
 #include <libxml/tree.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstddef>
 #include <cstdlib>
@@ -17,6 +18,7 @@ constexpr int kHeading = 1;
 constexpr int kItem = 2;
 constexpr int kQuote = 3;
 constexpr int kPre = 4;
+constexpr int kImage = 5;
 
 constexpr const char* kBreak = "\n";
 
@@ -31,6 +33,8 @@ struct Block {
     std::string prefix;
     std::vector<Word> words;
     std::string raw;  // preformatted blocks keep their spacing verbatim
+    std::string image;
+    std::string image_alt;
 };
 
 struct State {
@@ -43,6 +47,42 @@ struct State {
 struct DocFree {
     void operator()(htmlDocPtr d) const { xmlFreeDoc(d); }
 };
+
+bool validUtf8(const std::string& s) {
+    for (size_t i = 0; i < s.size();) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        int extra = 0;
+        if (c < 0x80)
+            extra = 0;
+        else if ((c & 0xE0) == 0xC0)
+            extra = 1;
+        else if ((c & 0xF0) == 0xE0)
+            extra = 2;
+        else if ((c & 0xF8) == 0xF0)
+            extra = 3;
+        else
+            return false;
+        if (extra > 0 && i + static_cast<size_t>(extra) >= s.size())
+            return false;
+        for (int k = 1; k <= extra; ++k)
+            if ((static_cast<unsigned char>(s[i + static_cast<size_t>(k)]) & 0xC0) != 0x80)
+                return false;
+        i += static_cast<size_t>(extra) + 1;
+    }
+    return true;
+}
+
+// Fragments we render are already UTF-8 (libxml2 dumps and feed payloads), but
+// without an explicit encoding the HTML parser assumes Latin-1 and double
+// encodes them. Real-world pages declare their own charset, so only force it
+// when the bytes actually are UTF-8.
+std::unique_ptr<xmlDoc, DocFree> parseHtml(const std::string& html) {
+    const char* encoding = validUtf8(html) ? "UTF-8" : nullptr;
+    return std::unique_ptr<xmlDoc, DocFree>(
+        htmlReadMemory(html.c_str(), static_cast<int>(html.size()), nullptr, encoding,
+                       HTML_PARSE_RECOVER | HTML_PARSE_NOERROR | HTML_PARSE_NOWARNING |
+                           HTML_PARSE_NONET));
+}
 
 std::string lowerName(const xmlNode* n) {
     std::string name;
@@ -216,6 +256,18 @@ void walk(xmlNode* n, unsigned style, State& st) {
             closeBlock(st);
             continue;
         }
+        if (name == "img") {
+            const std::string src = attr(n, "src");
+            if (!src.empty()) {
+                closeBlock(st);
+                Block b;
+                b.kind = kImage;
+                b.image = src;
+                b.image_alt = attr(n, "alt");
+                st.blocks.push_back(std::move(b));
+            }
+            continue;
+        }
         if (isHeading(name)) {
             closeBlock(st);
             openBlock(st, kHeading, "");
@@ -325,19 +377,17 @@ void walkLinks(xmlNode* n, std::vector<text::Link>& out) {
     }
 }
 
-void walkImages(xmlNode* n, std::vector<std::string>& out) {
+void walkImages(xmlNode* n, std::vector<std::string>& seen, std::vector<text::Image>& out) {
     for (; n; n = n->next) {
         if (n->type != XML_ELEMENT_NODE) continue;
-        const std::string name = lowerName(n);
-        if (name == "img") {
+        if (lowerName(n) == "img") {
             const std::string src = attr(n, "src");
-            if (!src.empty()) {
-                bool seen = false;
-                for (const std::string& s : out) seen = seen || s == src;
-                if (!seen) out.push_back(src);
+            if (!src.empty() && std::find(seen.begin(), seen.end(), src) == seen.end()) {
+                seen.push_back(src);
+                out.push_back(text::Image{src, attr(n, "alt")});
             }
         }
-        walkImages(n->children, out);
+        walkImages(n->children, seen, out);
     }
 }
 
@@ -386,6 +436,13 @@ void layoutPre(const Block& block, int width, text::Lines& out) {
 }
 
 void layout(const Block& block, int width, text::Lines& out) {
+    if (block.kind == kImage) {
+        text::Line line;
+        line.image = block.image;
+        line.image_alt = block.image_alt;
+        out.push_back(std::move(line));
+        return;
+    }
     if (block.kind == kPre) {
         layoutPre(block, width, out);
         return;
@@ -458,36 +515,28 @@ namespace text {
 
 std::vector<Link> links(const std::string& html) {
     std::vector<Link> out;
-    std::unique_ptr<xmlDoc, DocFree> doc(
-        htmlReadMemory(html.c_str(), static_cast<int>(html.size()), nullptr, nullptr,
-                       HTML_PARSE_RECOVER | HTML_PARSE_NOERROR | HTML_PARSE_NOWARNING |
-                           HTML_PARSE_NONET));
+    std::unique_ptr<xmlDoc, DocFree> doc = parseHtml(html);
     if (!doc) return out;
     xmlNode* root = xmlDocGetRootElement(doc.get());
     if (root) walkLinks(root, out);
     return out;
 }
 
-std::vector<std::string> imageUrls(const std::string& html) {
-    std::vector<std::string> out;
-    std::unique_ptr<xmlDoc, DocFree> doc(
-        htmlReadMemory(html.c_str(), static_cast<int>(html.size()), nullptr, nullptr,
-                       HTML_PARSE_RECOVER | HTML_PARSE_NOERROR | HTML_PARSE_NOWARNING |
-                           HTML_PARSE_NONET));
-    if (!doc) return out;
-    xmlNode* root = xmlDocGetRootElement(doc.get());
-    if (root) walkImages(root, out);
-    return out;
+std::vector<Image> images(const std::string& html) {
+  std::vector<Image> out;
+  std::unique_ptr<xmlDoc, DocFree> doc = parseHtml(html);
+  if (!doc) return out;
+
+  std::vector<std::string> sources;
+  walkImages(xmlDocGetRootElement(doc.get()), sources, out);
+  return out;
 }
 
 Lines renderHtml(const std::string& html, int width) {
     Lines out;
     if (width <= 0 || html.empty()) return out;
 
-    std::unique_ptr<xmlDoc, DocFree> doc(
-        htmlReadMemory(html.c_str(), static_cast<int>(html.size()), nullptr, nullptr,
-                       HTML_PARSE_RECOVER | HTML_PARSE_NOERROR | HTML_PARSE_NOWARNING |
-                           HTML_PARSE_NONET));
+    std::unique_ptr<xmlDoc, DocFree> doc = parseHtml(html);
     if (!doc) {
         // Not markup at all: fall back to plain wrapped words.
         State st;
@@ -502,7 +551,8 @@ Lines renderHtml(const std::string& html, int width) {
 
     int previous_kind = -1;
     for (const Block& b : st.blocks) {
-        if (b.words.empty() && b.raw.empty() && b.kind != kItem) continue;
+        if (b.words.empty() && b.raw.empty() && b.kind != kItem && b.kind != kImage)
+      continue;
         const bool tight = b.kind == kItem && previous_kind == kItem;
         if (!out.empty() && !tight) out.push_back(Line{});
         layout(b, width, out);

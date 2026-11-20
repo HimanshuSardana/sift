@@ -8,9 +8,8 @@ namespace image {
 // Ghostty, Konsole); SIFT_IMAGES=kitty|off overrides the guess.
 bool supported();
 
-// First usable http(s) image URL in the fragment, relative ones resolved
-// against base_url. Empty when there is none.
-std::string firstImageUrl(const std::string& html, const std::string& base_url);
+// Resolves an <img src> against the page URL; empty when it is not fetchable.
+std::string resolveUrl(const std::string& src, const std::string& base_url);
 
 // Pixel dimensions read from the PNG/JPEG/GIF header; false if unknown.
 bool probeSize(const std::string& bytes, int& width, int& height);
