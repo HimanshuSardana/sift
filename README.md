@@ -2,7 +2,7 @@
 
 A terminal RSS reader and page reader. Feeds live in local SQLite, articles are rendered as styled terminal text, and any URL can be read on its own with `sift <url>`.
 
-![sift: three feeds, a scraped article, the link palette, search, focus mode, the image palette, and one Wikipedia page read from the shell](docs/reel.gif)
+[![sift: three feeds, a scraped article, the link palette, search, focus mode, the image palette, and one Wikipedia page read from the shell](docs/reel-poster.jpg)](docs/reel.mp4)
 
 ```sh
 make
