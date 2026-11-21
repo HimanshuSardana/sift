@@ -1,0 +1,79 @@
+<template>
+<style>
+#root { position: absolute; inset: 0; overflow: hidden; background: var(--ground);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-ligatures: none; -webkit-font-smoothing: antialiased; }
+.stage { position: absolute; left: 96px; top: 24px; width: 1728px; height: 972px; overflow: hidden; }
+.fit { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform: scale(0.9); transform-origin: 0 0; }
+.cam { position: absolute; inset: 0; }
+.cap { position: absolute; left: 96px; top: 1026px; width: 1728px; font-size: 27px; line-height: 1.3;
+  color: #8A939D; white-space: pre; }
+.cap b { color: var(--cyan); font-weight: 400; }
+.state { position: absolute; inset: 0; }
+.r { position: absolute; white-space: pre; font-size: 29.6296px;
+  line-height: 37.2414px; height: 37.2414px; letter-spacing: 0; }
+.bl { position: absolute; background: var(--cyan); }
+.card { position: absolute; left: 120px; width: 1680px; }
+.dim { color: var(--dim); }
+.ink { color: var(--ink); }
+.cyan { color: var(--cyan); }
+
+#s12-end-shot { position: absolute; inset: 0; }
+#s12-end-mark { position: absolute; left: 96px; top: 296px; font-size: 240px; line-height: 1;
+  letter-spacing: -0.045em; color: var(--ink); white-space: pre; }
+#s12-end-claim { position: absolute; left: 100px; top: 606px; font-size: 46px; line-height: 1.2;
+  letter-spacing: -0.01em; color: var(--ink); white-space: pre; }
+#s12-end-note { position: absolute; left: 100px; top: 686px; font-size: 28px; color: var(--dim); white-space: pre; }
+#s12-end-cmd { position: absolute; left: 100px; top: 796px; font-size: 34px; white-space: pre; color: var(--ink); }
+#s12-end-cmd .sigil { color: var(--cyan); }
+#s12-end-cursor { position: absolute; left: 43px; top: 4px; width: 20px; height: 30px;
+  background: var(--ink); opacity: 0; }
+</style>
+<div id="root" data-composition-id="s12-end" data-width="1920" data-height="1080">
+  <div id="s12-end-shot" class="clip" data-start="0" data-duration="3.5" data-track-index="0">
+    <div id="s12-end-mark"><span id="s12-end-l0" class="ltr">s</span><span id="s12-end-l1" class="ltr">i</span><span id="s12-end-l2" class="ltr">f</span><span id="s12-end-l3" class="ltr">t</span></div>
+    <div id="s12-end-claim">A terminal RSS reader and page reader</div>
+    <div id="s12-end-note">C++20 and ncurses only · no daemon · no browser · no JavaScript</div>
+    <div id="s12-end-cmd"><span class="sigil">$</span> <span id="s12-end-c0" style="opacity:0">m</span><span id="s12-end-c1" style="opacity:0">a</span><span id="s12-end-c2" style="opacity:0">k</span><span id="s12-end-c3" style="opacity:0">e</span><span id="s12-end-c4" style="opacity:0"> </span><span id="s12-end-c5" style="opacity:0">&amp;</span><span id="s12-end-c6" style="opacity:0">&amp;</span><span id="s12-end-c7" style="opacity:0"> </span><span id="s12-end-c8" style="opacity:0">.</span><span id="s12-end-c9" style="opacity:0">/</span><span id="s12-end-c10" style="opacity:0">s</span><span id="s12-end-c11" style="opacity:0">i</span><span id="s12-end-c12" style="opacity:0">f</span><span id="s12-end-c13" style="opacity:0">t</span><span id="s12-end-cursor" data-layout-allow-occlusion></span></div>
+  </div>
+  <script>
+const tl = gsap.timeline({ paused: true });
+tl.fromTo("#s12-end-l0, #s12-end-l1, #s12-end-l2, #s12-end-l3",
+    { opacity: 0.25, filter: "blur(5px)" },
+    { opacity: 1, filter: "blur(0px)", duration: 0.2, ease: "power2.out", stagger: 0.1 }, 0.15);
+tl.fromTo("#s12-end-claim", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 0.24, ease: "power4.out" }, 0.72);
+tl.fromTo("#s12-end-note", { opacity: 0 }, { opacity: 1, duration: 0.22, ease: "power2.out" }, 1.0);
+tl.fromTo("#s12-end-cmd", { opacity: 0 }, { opacity: 1, duration: 0.16, ease: "power2.out" }, 1.28);
+tl.set("#s12-end-c0", { opacity: 1 }, 1.340);
+tl.set("#s12-end-cursor", { x: 20.4 }, 1.340);
+tl.set("#s12-end-c1", { opacity: 1 }, 1.378);
+tl.set("#s12-end-cursor", { x: 40.8 }, 1.378);
+tl.set("#s12-end-c2", { opacity: 1 }, 1.417);
+tl.set("#s12-end-cursor", { x: 61.199999999999996 }, 1.417);
+tl.set("#s12-end-c3", { opacity: 1 }, 1.455);
+tl.set("#s12-end-cursor", { x: 81.6 }, 1.455);
+tl.set("#s12-end-cursor", { x: 102 }, 1.494);
+tl.set("#s12-end-c5", { opacity: 1 }, 1.532);
+tl.set("#s12-end-cursor", { x: 122.39999999999999 }, 1.532);
+tl.set("#s12-end-c6", { opacity: 1 }, 1.571);
+tl.set("#s12-end-cursor", { x: 142.79999999999998 }, 1.571);
+tl.set("#s12-end-cursor", { x: 163.2 }, 1.609);
+tl.set("#s12-end-c8", { opacity: 1 }, 1.648);
+tl.set("#s12-end-cursor", { x: 183.6 }, 1.648);
+tl.set("#s12-end-c9", { opacity: 1 }, 1.686);
+tl.set("#s12-end-cursor", { x: 204 }, 1.686);
+tl.set("#s12-end-c10", { opacity: 1 }, 1.725);
+tl.set("#s12-end-cursor", { x: 224.39999999999998 }, 1.725);
+tl.set("#s12-end-c11", { opacity: 1 }, 1.763);
+tl.set("#s12-end-cursor", { x: 244.79999999999998 }, 1.763);
+tl.set("#s12-end-c12", { opacity: 1 }, 1.802);
+tl.set("#s12-end-cursor", { x: 265.2 }, 1.802);
+tl.set("#s12-end-c13", { opacity: 1 }, 1.840);
+tl.set("#s12-end-cursor", { x: 285.59999999999997 }, 1.840);
+tl.set("#s12-end-cursor", { opacity: 1 }, 2.0);
+tl.set("#s12-end-cursor", { opacity: 0 }, 2.35);
+tl.set("#s12-end-cursor", { opacity: 1 }, 2.7);
+window.__timelines["s12-end"] = tl;
+  </script>
+</div>
+</template>

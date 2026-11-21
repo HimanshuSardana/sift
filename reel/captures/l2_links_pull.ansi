@@ -1,0 +1,29 @@
+[2m[36m┌─[33m Rust Blog (10) [36m──┐[0;1m[36m┌─[35m Enabling the parallel frontend on nightly [36m─────────────────────────────────────────┐
+[0;2m[36m│[7m[39m 2026-11-16 Enablin[0;2m[36m│[0;1m[36m│[0m[33mJakub Beránek  2026-11-16[39m                                                            [1m[36m│
+[0;2m[36m│[0m [33m2026-11-12[39m Announc[2m[36m│[0;1m[36m│[0;2m[34mhttps://blog.rust-lang.org/2026/11/16/enabling-parallel-frontend-on-nightly/[0m         [1m[36m│
+[0;2m[36m│[0m [33m2026-11-11[39m Google [2m[36m│[0;1m[36m│[0m                                                                                     [1m[36m│
+[0;2m[36m│[0m [33m2026-11-03[39m Ann[1m[36m┌─[35m links (1/11) [36m───────────────────────────────────────────────────────────┐[0mightly by      [1m[36m│
+[0;2m[36m│[0m [33m2026-10-26[39m How[1m[36m│[39m> pull[0m                                                                    [1m[36m│[0m.              [1m[36m│
+[0;2m[36m│[0m [33m2026-10-20[39m Ann[1m[36m│[0m                                                                          [1m[36m│[0m               [1m[36m│
+[0;2m[36m│[0m [33m2026-10-15[39m Ann[1m[36m│[0;7m pull request  https://github.com/rust-lang/rust/pull/163495              [0;1m[36m│[0m               [1m[36m│
+[0;2m[36m│[0m [33m2026-10-02[39m Dem[1m[36m│[0m                                                                          [1m[36m│[0m               [1m[36m│
+[0;2m[36m│[0m [33m2026-10-01[39m Ann[1m[36m│[0m                                                                          [1m[36m│[0mts "backend"   [1m[36m│
+[0;2m[36m│[0m [33m2026-09-22[39m Ann[1m[36m│[0m                                                                          [1m[36m│[0m includes type [1m[36m│
+[0;2m[36m│[0m               [1m[36m│[0m                                                                          [1m[36m│[0mngle thread,   [1m[36m│
+[0;2m[36m│[0m               [1m[36m│[0m                                                                          [1m[36m│[0merested in a   [1m[36m│
+[0;2m[36m│[0m               [1m[36m│[0m                                                                          [1m[36m│[0ms[4m[34m previous post[0;1m[36m│
+[0;2m[36m│[0m               [1m[36m│[0m                                                                          [1m[36m│[0;2m[33mrocess-parallel[0;1m[36m│
+[0;2m[36m│[0m               [1m[36m│[0m                                                                          [1m[36m│[0m               [1m[36m│
+[0;2m[36m│[0m               [1m[36m│[0m                                                                          [1m[36m│[0m               [1m[36m│
+[0;2m[36m│[0m               [1m[36m│[0m                                                                          [1m[36m│[0m a long time,  [1m[36m│
+[0;2m[36m│[0m               [1m[36m│[0m                                                                          [1m[36m│[0;4m[34mgo[0m             [1m[36m│
+[0;2m[36m│[0m               [1m[36m│[0m                                                                          [1m[36m│[0mossible to opt [1m[36m│
+[0;2m[36m│[0m               [1m[36m│[0m                                                                          [1m[36m│[0mabilize it in  [1m[36m│
+[0;2m[36m│[0m               [1m[36m│[0m                                                                          [1m[36m│[0mfrontend was   [1m[36m│
+[0;2m[36m│[0m               [1m[36m│[0;2m^N/^P move  Enter open  Esc close[0m                                         [1m[36m│[0m               [1m[36m│
+[0;2m[36m│[0m               [1m[36m└──────────────────────────────────────────────────────────────────────────┘[0m               [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0mLast year,[4m[34m Vadim Petrochenkov[0;2m[33m (https://github.com/petrochenkov)[0m , together with      [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0mseveral other contributors, started a coordinated effort to finally get the parallel [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0mfrontend over the finish line. Since then, many long-standing issues were fixed, and [1m[36m│
+[0;2m[36m└───────────────────┘[0;1m[36m└─────────────────────────────────────────────────────────────────────────────────────┘
+[0;2m j/k  s scrape  o open  i images  f links  C-f focus  q quit [0m

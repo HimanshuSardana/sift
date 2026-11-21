@@ -1,0 +1,29 @@
+[2m[36m┌─[33m Rust Blog (10) [36m──┐[0;1m[36m┌─[35m Enabling the parallel frontend on nightly [36m─────────────────────────────────────────┐
+[0;2m[36m│[7m[39m 2026-11-16 Enablin[0;2m[36m│[0;1m[36m│[0m[33mJakub Beránek  2026-11-16[39m                                                            [1m[36m│
+[0;2m[36m│[0m [33m2026-11-12[39m Announc[2m[36m│[0;1m[36m│[0;2m[34mhttps://blog.rust-lang.org/2026/11/16/enabling-parallel-frontend-on-nightly/[0m         [1m[36m│
+[0;2m[36m│[0m [33m2026-11-11[39m Google [2m[36m│[0;1m[36m│[0m                                                                                     [1m[36m│
+[0;2m[36m│[0m [33m2026-11-03[39m Announc[2m[36m│[0;1m[36m│[0mTL;DR: We are enabling the parallel frontend of the Rust compiler on nightly by      [1m[36m│
+[0;2m[36m│[0m [33m2026-10-26[39m How to [2m[36m│[0;1m[36m│[0mdefault, to find remaining issues in preparation for its stabilization.              [1m[36m│
+[0;2m[36m│[0m [33m2026-10-20[39m Announc[2m[36m│[0;1m[36m│[0m                                                                                     [1m[36m│
+[0;2m[36m│[0m [33m2026-10-15[39m Announc[2m[36m│[0;1m[36m│[35mContext[0m                                                                              [1m[36m│
+[0;2m[36m│[0m [33m2026-10-02[39m Demotin[2m[36m│[0;1m[36m│[0m                                                                                     [1m[36m│
+[0;2m[36m│[0m [33m2026-10-01[39m Announc[2m[36m│[0;1m[36m│[0mThe Rust compiler has been using multiple threads to compile code in its "backend"   [1m[36m│
+[0;2m[36m│[0m [33m2026-09-22[39m Announc[2m[36m│[0;1m[36m│[0mpart (using LLVM) for a long time. However, its "frontend" part (which includes type [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0mchecking and borrow checking) has been executing sequentially, on a single thread,   [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0mwhich of course limits the performance of the compiler. If you are interested in a   [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0mmore in-depth explanation of parallelism in the Rust compiler, see this[4m[34m previous post[0;1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0;2m[33m(https://blog.rust-lang.org/2023/11/09/parallel-rustc/#existing-intraprocess-parallel[0;1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0;2m[33mism-the-back-end)[0m .                                                                  [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0m                                                                                     [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0mThe compiler frontend actually had support for running in parallel for a long time,  [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0mbut it was not enabled by default due to various issues.[4m[34m Three years ago[0m             [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0;2m[33m(https://blog.rust-lang.org/2023/11/09/parallel-rustc/)[0m , we made it possible to opt [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0minto the parallel frontend on the nightly channel, with the plan to stabilize it in  [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0m2024. Clearly, we did not achieve that goal, but work on the parallel frontend was   [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0mstill slowly progressing in the meantime.                                            [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0m                                                                                     [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0mLast year,[4m[34m Vadim Petrochenkov[0;2m[33m (https://github.com/petrochenkov)[0m , together with      [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0mseveral other contributors, started a coordinated effort to finally get the parallel [1m[36m│
+[0;2m[36m│[0m                   [2m[36m│[0;1m[36m│[0mfrontend over the finish line. Since then, many long-standing issues were fixed, and [1m[36m│
+[0;2m[36m└───────────────────┘[0;1m[36m└─────────────────────────────────────────────────────────────────────────────────────┘
+[0;2m j/k  s scrape  o open  i images  f links  C-f focus  q quit [0m

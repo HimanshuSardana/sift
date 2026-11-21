@@ -5,3 +5,6 @@ tests/*_test
 *.db
 *.db-wal
 *.db-shm
+reel/renders/
+reel/.hyperframes/
+reel/.media/

@@ -1,0 +1,112 @@
+<template>
+<style>
+#root { position: absolute; inset: 0; overflow: hidden; background: var(--ground);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-ligatures: none; -webkit-font-smoothing: antialiased; }
+.stage { position: absolute; left: 96px; top: 24px; width: 1728px; height: 972px; overflow: hidden; }
+.fit { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform: scale(0.9); transform-origin: 0 0; }
+.cam { position: absolute; inset: 0; }
+.cap { position: absolute; left: 96px; top: 1026px; width: 1728px; font-size: 27px; line-height: 1.3;
+  color: #8A939D; white-space: pre; }
+.cap b { color: var(--cyan); font-weight: 400; }
+.state { position: absolute; inset: 0; }
+.r { position: absolute; white-space: pre; font-size: 29.6296px;
+  line-height: 37.2414px; height: 37.2414px; letter-spacing: 0; }
+.bl { position: absolute; background: var(--cyan); }
+.card { position: absolute; left: 120px; width: 1680px; }
+.dim { color: var(--dim); }
+.ink { color: var(--ink); }
+.cyan { color: var(--cyan); }
+
+#s10-url-shot { position: absolute; inset: 0; }
+#s10-url-prompt { position: absolute; left: 35.56px; top: 260.69px;
+  font-size: 29.6296px; line-height: 37.2414px; white-space: pre; color: var(--ink); }
+#s10-url-prompt .sigil { color: var(--dim); }
+#s10-url-cursor { position: absolute; left: 71.11px; top: 2px;
+  width: 17.778px; height: 27.56px; background: var(--ink); opacity: 0.92; }
+</style>
+<div id="root" data-composition-id="s10-url" data-width="1920" data-height="1080">
+  <div id="s10-url-shot" class="clip" data-start="0" data-duration="1.5" data-track-index="0">
+    <div class="stage"><div class="fit">
+      <div id="s10-url-prompt"><span class="sigil">~</span> <span class="cyan">$</span> <span id="s10-url-c0" style="opacity:0">s</span><span id="s10-url-c1" style="opacity:0">i</span><span id="s10-url-c2" style="opacity:0">f</span><span id="s10-url-c3" style="opacity:0">t</span><span id="s10-url-c4" style="opacity:0"> </span><span id="s10-url-c5" style="opacity:0">e</span><span id="s10-url-c6" style="opacity:0">n</span><span id="s10-url-c7" style="opacity:0">.</span><span id="s10-url-c8" style="opacity:0">w</span><span id="s10-url-c9" style="opacity:0">i</span><span id="s10-url-c10" style="opacity:0">k</span><span id="s10-url-c11" style="opacity:0">i</span><span id="s10-url-c12" style="opacity:0">p</span><span id="s10-url-c13" style="opacity:0">e</span><span id="s10-url-c14" style="opacity:0">d</span><span id="s10-url-c15" style="opacity:0">i</span><span id="s10-url-c16" style="opacity:0">a</span><span id="s10-url-c17" style="opacity:0">.</span><span id="s10-url-c18" style="opacity:0">o</span><span id="s10-url-c19" style="opacity:0">r</span><span id="s10-url-c20" style="opacity:0">g</span><span id="s10-url-c21" style="opacity:0">/</span><span id="s10-url-c22" style="opacity:0">w</span><span id="s10-url-c23" style="opacity:0">i</span><span id="s10-url-c24" style="opacity:0">k</span><span id="s10-url-c25" style="opacity:0">i</span><span id="s10-url-c26" style="opacity:0">/</span><span id="s10-url-c27" style="opacity:0">A</span><span id="s10-url-c28" style="opacity:0">p</span><span id="s10-url-c29" style="opacity:0">o</span><span id="s10-url-c30" style="opacity:0">l</span><span id="s10-url-c31" style="opacity:0">l</span><span id="s10-url-c32" style="opacity:0">o</span><span id="s10-url-c33" style="opacity:0">_</span><span id="s10-url-c34" style="opacity:0">1</span><span id="s10-url-c35" style="opacity:0">1</span><span id="s10-url-cursor" data-layout-allow-occlusion></span></div>
+    </div></div>
+  </div>
+  <script>
+const tl = gsap.timeline({ paused: true });
+tl.fromTo("#s10-url-prompt", { opacity: 0 }, { opacity: 1, duration: 0.16, ease: "power2.out" }, 0);
+tl.set("#s10-url-c0", { opacity: 1 }, 0.220);
+tl.set("#s10-url-cursor", { x: 17.77777777777778 }, 0.220);
+tl.set("#s10-url-c1", { opacity: 1 }, 0.249);
+tl.set("#s10-url-cursor", { x: 35.55555555555556 }, 0.249);
+tl.set("#s10-url-c2", { opacity: 1 }, 0.279);
+tl.set("#s10-url-cursor", { x: 53.333333333333336 }, 0.279);
+tl.set("#s10-url-c3", { opacity: 1 }, 0.308);
+tl.set("#s10-url-cursor", { x: 71.11111111111111 }, 0.308);
+tl.set("#s10-url-cursor", { x: 88.88888888888889 }, 0.338);
+tl.set("#s10-url-c5", { opacity: 1 }, 0.367);
+tl.set("#s10-url-cursor", { x: 106.66666666666667 }, 0.367);
+tl.set("#s10-url-c6", { opacity: 1 }, 0.396);
+tl.set("#s10-url-cursor", { x: 124.44444444444446 }, 0.396);
+tl.set("#s10-url-c7", { opacity: 1 }, 0.426);
+tl.set("#s10-url-cursor", { x: 142.22222222222223 }, 0.426);
+tl.set("#s10-url-c8", { opacity: 1 }, 0.455);
+tl.set("#s10-url-cursor", { x: 160 }, 0.455);
+tl.set("#s10-url-c9", { opacity: 1 }, 0.485);
+tl.set("#s10-url-cursor", { x: 177.77777777777777 }, 0.485);
+tl.set("#s10-url-c10", { opacity: 1 }, 0.514);
+tl.set("#s10-url-cursor", { x: 195.55555555555557 }, 0.514);
+tl.set("#s10-url-c11", { opacity: 1 }, 0.544);
+tl.set("#s10-url-cursor", { x: 213.33333333333334 }, 0.544);
+tl.set("#s10-url-c12", { opacity: 1 }, 0.573);
+tl.set("#s10-url-cursor", { x: 231.11111111111111 }, 0.573);
+tl.set("#s10-url-c13", { opacity: 1 }, 0.602);
+tl.set("#s10-url-cursor", { x: 248.8888888888889 }, 0.602);
+tl.set("#s10-url-c14", { opacity: 1 }, 0.632);
+tl.set("#s10-url-cursor", { x: 266.6666666666667 }, 0.632);
+tl.set("#s10-url-c15", { opacity: 1 }, 0.661);
+tl.set("#s10-url-cursor", { x: 284.44444444444446 }, 0.661);
+tl.set("#s10-url-c16", { opacity: 1 }, 0.691);
+tl.set("#s10-url-cursor", { x: 302.22222222222223 }, 0.691);
+tl.set("#s10-url-c17", { opacity: 1 }, 0.720);
+tl.set("#s10-url-cursor", { x: 320 }, 0.720);
+tl.set("#s10-url-c18", { opacity: 1 }, 0.749);
+tl.set("#s10-url-cursor", { x: 337.77777777777777 }, 0.749);
+tl.set("#s10-url-c19", { opacity: 1 }, 0.779);
+tl.set("#s10-url-cursor", { x: 355.55555555555554 }, 0.779);
+tl.set("#s10-url-c20", { opacity: 1 }, 0.808);
+tl.set("#s10-url-cursor", { x: 373.33333333333337 }, 0.808);
+tl.set("#s10-url-c21", { opacity: 1 }, 0.838);
+tl.set("#s10-url-cursor", { x: 391.11111111111114 }, 0.838);
+tl.set("#s10-url-c22", { opacity: 1 }, 0.867);
+tl.set("#s10-url-cursor", { x: 408.8888888888889 }, 0.867);
+tl.set("#s10-url-c23", { opacity: 1 }, 0.896);
+tl.set("#s10-url-cursor", { x: 426.6666666666667 }, 0.896);
+tl.set("#s10-url-c24", { opacity: 1 }, 0.926);
+tl.set("#s10-url-cursor", { x: 444.44444444444446 }, 0.926);
+tl.set("#s10-url-c25", { opacity: 1 }, 0.955);
+tl.set("#s10-url-cursor", { x: 462.22222222222223 }, 0.955);
+tl.set("#s10-url-c26", { opacity: 1 }, 0.985);
+tl.set("#s10-url-cursor", { x: 480 }, 0.985);
+tl.set("#s10-url-c27", { opacity: 1 }, 1.014);
+tl.set("#s10-url-cursor", { x: 497.7777777777778 }, 1.014);
+tl.set("#s10-url-c28", { opacity: 1 }, 1.044);
+tl.set("#s10-url-cursor", { x: 515.5555555555555 }, 1.044);
+tl.set("#s10-url-c29", { opacity: 1 }, 1.073);
+tl.set("#s10-url-cursor", { x: 533.3333333333334 }, 1.073);
+tl.set("#s10-url-c30", { opacity: 1 }, 1.102);
+tl.set("#s10-url-cursor", { x: 551.1111111111111 }, 1.102);
+tl.set("#s10-url-c31", { opacity: 1 }, 1.132);
+tl.set("#s10-url-cursor", { x: 568.8888888888889 }, 1.132);
+tl.set("#s10-url-c32", { opacity: 1 }, 1.161);
+tl.set("#s10-url-cursor", { x: 586.6666666666667 }, 1.161);
+tl.set("#s10-url-c33", { opacity: 1 }, 1.191);
+tl.set("#s10-url-cursor", { x: 604.4444444444445 }, 1.191);
+tl.set("#s10-url-c34", { opacity: 1 }, 1.220);
+tl.set("#s10-url-cursor", { x: 622.2222222222223 }, 1.220);
+tl.set("#s10-url-c35", { opacity: 1 }, 1.249);
+tl.set("#s10-url-cursor", { x: 640 }, 1.249);
+tl.set("#s10-url-cursor", { opacity: 0 }, 1.22);
+window.__timelines["s10-url"] = tl;
+  </script>
+</div>
+</template>
