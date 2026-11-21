@@ -2,6 +2,8 @@
 
 A terminal RSS reader and page reader. Feeds live in local SQLite, articles are rendered as styled terminal text, and any URL can be read on its own with `sift <url>`.
 
+![sift: three feeds, a scraped article, the link palette, search, focus mode, the image palette, and one Wikipedia page read from the shell](docs/reel.gif)
+
 ```sh
 make
 ./sift                          # feed dashboard
@@ -9,12 +11,6 @@ make
 ```
 
 C++20 and ncurses only. No daemon, no sync service, no browser, no JavaScript.
-
-## Reel
-
-![sift: three feeds, a scraped article, the link palette, search, focus mode, the image palette, and one Wikipedia page read from the shell](docs/reel.gif)
-
-25 seconds, no voiceover: three feeds, a post list, `s` scraping a news page into prose, the link palette, search, `Ctrl-F`, and one Wikipedia page read straight from the shell. Every frame is the real binary; the captions and key sounds are the only additions. [Full-resolution MP4](docs/reel.mp4) (4 MB, 1080p).
 
 ## Features
 
